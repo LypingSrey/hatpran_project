@@ -4,8 +4,13 @@ namespace Tests\Feature\Api;
 
 use App\Models\Equipment;
 use App\Models\Exercise;
+use App\Models\ExerciseSet;
+use App\Models\ManualRecord;
 use App\Models\MuscleGroup;
+use App\Models\PersonalRecord;
 use App\Models\User;
+use App\Models\Workout;
+use App\Models\WorkoutExercise;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use PHPUnit\Framework\Attributes\TestWith;
@@ -47,6 +52,21 @@ class ExerciseControllerTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.name', 'Bench Press');
+    }
+
+    public function test_index_search_treats_percent_and_underscore_as_plain_characters(): void
+    {
+        Exercise::factory()->create(['name' => 'Bench Press']);
+        Exercise::factory()->create(['name' => 'Squat 100%']);
+
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->getJson('/api/exercises?search=%25')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.name', 'Squat 100%');
+
+        $this->getJson('/api/exercises?search=_')->assertOk()->assertJsonCount(0, 'data');
     }
 
     public function test_index_search_does_not_leak_other_users_custom_exercises(): void
@@ -201,6 +221,41 @@ class ExerciseControllerTest extends TestCase
             ->assertJsonPath('data.name', 'Renamed');
 
         $this->assertDatabaseHas('exercises', ['id' => $exercise->id, 'name' => 'Renamed', 'description' => null]);
+    }
+
+    public function test_update_changing_type_rebuilds_records_and_drops_manual_records_it_no_longer_tracks(): void
+    {
+        $user = User::factory()->create();
+        $exercise = Exercise::factory()->custom()->for($user)->create(['exercise_type' => 'weight_reps']);
+        $workoutExercise = WorkoutExercise::factory()->for(Workout::factory()->for($user))->for($exercise)->create();
+        ExerciseSet::factory()->for($workoutExercise)->create(['weight_kg' => 100, 'reps' => 5, 'duration_seconds' => 90]);
+        $weightEntry = ManualRecord::factory()->for($user)->for($exercise)->create(['record_type' => 'max_weight', 'value' => 120]);
+        PersonalRecord::recalculate($user->id, [$exercise->id]);
+
+        Sanctum::actingAs($user);
+
+        $this->putJson("/api/exercises/{$exercise->id}", ['exercise_type' => 'duration'])->assertOk();
+
+        $this->assertSame(
+            ['max_duration'],
+            PersonalRecord::query()->where('exercise_id', $exercise->id)->pluck('record_type')->all(),
+        );
+        $this->assertModelMissing($weightEntry);
+    }
+
+    public function test_update_without_type_change_keeps_records(): void
+    {
+        $user = User::factory()->create();
+        $exercise = Exercise::factory()->custom()->for($user)->create(['exercise_type' => 'weight_reps']);
+        $entry = ManualRecord::factory()->for($user)->for($exercise)->create(['record_type' => 'max_weight', 'value' => 120]);
+        PersonalRecord::recalculate($user->id, [$exercise->id]);
+
+        Sanctum::actingAs($user);
+
+        $this->putJson("/api/exercises/{$exercise->id}", ['name' => 'Renamed', 'exercise_type' => 'weight_reps'])->assertOk();
+
+        $this->assertModelExists($entry);
+        $this->assertSame(1, PersonalRecord::query()->where('exercise_id', $exercise->id)->count());
     }
 
     public function test_update_forbids_editing_global_exercise_with_403(): void

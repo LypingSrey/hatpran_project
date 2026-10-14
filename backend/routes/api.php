@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\MuscleGroupController;
 use App\Http\Controllers\Api\PersonalRecordController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\WorkoutController;
+use App\Http\Controllers\Api\WorkoutExerciseController;
 use App\Http\Controllers\Api\WorkoutTemplateController;
 use Illuminate\Support\Facades\Route;
 
@@ -43,6 +44,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // Workouts
     Route::post('workouts/{workout}/complete', [WorkoutController::class, 'complete']);
     Route::apiResource('workouts', WorkoutController::class);
+
+    // Exercises inside a workout (add, change or remove mid-session)
+    Route::post('workouts/{workout}/exercises', [WorkoutExerciseController::class, 'store']);
+    Route::put('workout-exercises/{workoutExercise}', [WorkoutExerciseController::class, 'update']);
+    Route::delete('workout-exercises/{workoutExercise}', [WorkoutExerciseController::class, 'destroy']);
 
     // Workout Templates
     Route::post('workout-templates/{workoutTemplate}/start', [WorkoutTemplateController::class, 'startWorkout']);

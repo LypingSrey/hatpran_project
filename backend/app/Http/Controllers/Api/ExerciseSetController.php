@@ -10,6 +10,7 @@ use App\Models\WorkoutExercise;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 
 class ExerciseSetController extends Controller
 {
@@ -34,18 +35,23 @@ class ExerciseSetController extends Controller
             'is_completed' => 'boolean',
         ]);
 
-        $lastSetNumber = $workoutExercise->sets()->max('set_number') ?? 0;
+        $set = DB::transaction(function () use ($workoutExercise, $validated) {
+            // Lock the exercise so two quick "Add set" taps can't both take the same set number.
+            WorkoutExercise::query()->whereKey($workoutExercise->id)->lockForUpdate()->first();
 
-        $set = $workoutExercise->sets()->create([
-            'set_number' => $lastSetNumber + 1,
-            'set_type' => $validated['set_type'] ?? 'normal',
-            'weight_kg' => $validated['weight_kg'] ?? null,
-            'reps' => $validated['reps'] ?? null,
-            'distance_meters' => $validated['distance_meters'] ?? null,
-            'duration_seconds' => $validated['duration_seconds'] ?? null,
-            'rpe' => $validated['rpe'] ?? null,
-            'is_completed' => $validated['is_completed'] ?? false,
-        ]);
+            $lastSetNumber = $workoutExercise->sets()->max('set_number') ?? 0;
+
+            return $workoutExercise->sets()->create([
+                'set_number' => $lastSetNumber + 1,
+                'set_type' => $validated['set_type'] ?? 'normal',
+                'weight_kg' => $validated['weight_kg'] ?? null,
+                'reps' => $validated['reps'] ?? null,
+                'distance_meters' => $validated['distance_meters'] ?? null,
+                'duration_seconds' => $validated['duration_seconds'] ?? null,
+                'rpe' => $validated['rpe'] ?? null,
+                'is_completed' => $validated['is_completed'] ?? false,
+            ]);
+        });
 
         $this->recalculateRecordsIfFinished($workoutExercise);
 

@@ -491,4 +491,35 @@ class WorkoutControllerTest extends TestCase
 
         $this->assertModelExists($workout);
     }
+
+    public function test_update_rejects_start_and_finish_times_in_the_future_with_422(): void
+    {
+        $user = User::factory()->create();
+        $workout = Workout::factory()->for($user)->inProgress()->create();
+
+        Sanctum::actingAs($user);
+
+        $this->putJson("/api/workouts/{$workout->id}", [
+            'started_at' => now()->addDay()->toIso8601String(),
+            'completed_at' => now()->addDay()->addHour()->toIso8601String(),
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'started_at' => "The start time can't be in the future.",
+                'completed_at' => "The finish time can't be in the future.",
+            ]);
+
+        $this->assertNull($workout->fresh()->completed_at);
+    }
+
+    public function test_update_allows_finish_time_a_moment_ahead_for_clock_drift(): void
+    {
+        $user = User::factory()->create();
+        $workout = Workout::factory()->for($user)->inProgress()->create(['started_at' => now()->subHour()]);
+
+        Sanctum::actingAs($user);
+
+        $this->putJson("/api/workouts/{$workout->id}", ['completed_at' => now()->addMinute()->toIso8601String()])
+            ->assertOk();
+    }
 }

@@ -123,11 +123,15 @@ class WorkoutController extends Controller
             abort(403);
         }
 
+        // Times can't be in the future; a few minutes' slack covers a phone clock that runs slightly fast.
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
             'notes' => 'nullable|string',
-            'started_at' => 'sometimes|required|date',
-            'completed_at' => 'nullable|date',
+            'started_at' => 'sometimes|required|date|before_or_equal:+5 minutes',
+            'completed_at' => 'nullable|date|before_or_equal:+5 minutes',
+        ], [
+            'started_at.before_or_equal' => "The start time can't be in the future.",
+            'completed_at.before_or_equal' => "The finish time can't be in the future.",
         ]);
 
         $startedAt = isset($validated['started_at']) ? Carbon::parse($validated['started_at']) : $workout->started_at;

@@ -16,6 +16,7 @@ import type {
   User,
   UserStats,
   Workout,
+  WorkoutExercise,
   WorkoutTemplate,
 } from './types';
 
@@ -180,6 +181,10 @@ export const api = {
     request<CompleteWorkoutResponse>('PUT', `/workouts/${id}`, body),
   completeWorkout: (id: number) => request<CompleteWorkoutResponse>('POST', `/workouts/${id}/complete`),
   deleteWorkout: (id: number) => request<void>('DELETE', `/workouts/${id}`),
+
+  addWorkoutExercise: (workoutId: number, body: { exercise_id: number; notes?: string | null; sets?: SetInput[] }) =>
+    request<Data<WorkoutExercise>>('POST', `/workouts/${workoutId}/exercises`, body),
+  deleteWorkoutExercise: (id: number) => request<void>('DELETE', `/workout-exercises/${id}`),
 
   addSet: (workoutExerciseId: number, body: SetInput) =>
     request<Data<ExerciseSet>>('POST', `/workout-exercises/${workoutExerciseId}/sets`, body),

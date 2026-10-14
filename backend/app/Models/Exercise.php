@@ -105,4 +105,9 @@ class Exercise extends Model
     {
         return $this->hasMany(PersonalRecord::class);
     }
+
+    public function manualRecords(): HasMany
+    {
+        return $this->hasMany(ManualRecord::class);
+    }
 }

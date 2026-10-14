@@ -5,6 +5,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, useWindowD
 import Animated, { LayoutAnimationConfig } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ExercisePicker } from '@/components/ExercisePicker';
 import { SetRow } from '@/components/SetRow';
 import { Button, Card, ErrorBanner, Loading, useText } from '@/components/ui';
 import { api, type SetInput } from '@/lib/api';
@@ -22,7 +23,7 @@ import {
   setFieldsFor,
 } from '@/lib/format';
 import { fonts, makeStyles, radius, spacing, type, useColors } from '@/lib/theme';
-import type { ExerciseSet, PersonalRecord, Workout, WorkoutExercise } from '@/lib/types';
+import type { Exercise, ExerciseSet, PersonalRecord, Workout, WorkoutExercise } from '@/lib/types';
 import { useApi } from '@/lib/useApi';
 
 export default function WorkoutScreen() {
@@ -31,9 +32,12 @@ export default function WorkoutScreen() {
   const { data, error, isLoading, refresh, setData } = useApi(() => api.workout(workoutId), [workoutId]);
   const [newRecords, setNewRecords] = useState<PersonalRecord[] | null>(null);
   const [finishing, setFinishing] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [addingExercises, setAddingExercises] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const styles = useStyles();
   const t = useText();
+  const c = useColors();
   const insets = useSafeAreaInsets();
   // Short phones (iPhone SE, many Androids) get a tighter summary so the first card's Add set stays above Finish.
   const compact = useWindowDimensions().height < 740;
@@ -125,6 +129,47 @@ export default function WorkoutScreen() {
 
   const deleteSet = (we: WorkoutExercise, set: ExerciseSet) =>
     confirm('Delete set?', `Set ${set.set_number} will be removed.`, 'Delete', () => removeSet(we, set));
+
+  // Add the picked exercises to the end of the workout, in the order they were picked, each with three blank
+  // sets as when starting a workout. Stops at the first failure so the list never ends up out of order.
+  const addExercises = async (picked: Exercise[]) => {
+    setPickerOpen(false);
+    setAddingExercises(true);
+    try {
+      for (const exercise of picked) {
+        const { data: created } = await api.addWorkoutExercise(workout.id, {
+          exercise_id: exercise.id,
+          sets: [{}, {}, {}],
+        });
+        replaceWorkout((w) => ({ ...w, exercises: [...(w.exercises ?? []), created] }));
+      }
+    } catch (e) {
+      showError(e);
+    } finally {
+      setAddingExercises(false);
+    }
+  };
+
+  // Take the exercise off at once; if the delete fails, put it back where it was.
+  const removeExercise = (we: WorkoutExercise) =>
+    confirm(
+      'Remove exercise?',
+      `${we.exercise?.name ?? 'This exercise'} and its sets will be removed from this workout.`,
+      'Remove',
+      async () => {
+        const index = (workout.exercises ?? []).findIndex((e) => e.id === we.id);
+        replaceWorkout((w) => ({ ...w, exercises: w.exercises?.filter((e) => e.id !== we.id) }));
+        try {
+          await api.deleteWorkoutExercise(we.id);
+        } catch (e) {
+          replaceWorkout((w) => {
+            const rest = w.exercises ?? [];
+            return { ...w, exercises: [...rest.slice(0, index), we, ...rest.slice(index)] };
+          });
+          showError(e);
+        }
+      },
+    );
 
   const finish = async () => {
     const pending = allSets.filter((s) => !s.is_completed).length;
@@ -261,12 +306,23 @@ export default function WorkoutScreen() {
               const detail = [we.exercise?.muscle_group?.name, we.exercise?.equipment?.name].filter(Boolean).join(' · ');
               return (
                 <Card key={we.id} style={styles.exercise}>
-                  <View style={styles.exerciseHead}>
-                    <Text style={t.heading} accessibilityRole="header">
-                      {we.exercise?.name ?? 'Exercise'}
-                    </Text>
-                    {detail ? <Text style={t.caption}>{detail}</Text> : null}
-                    {we.notes ? <Text style={t.muted}>{we.notes}</Text> : null}
+                  <View style={styles.exerciseHeadRow}>
+                    <View style={styles.exerciseHead}>
+                      <Text style={t.heading} accessibilityRole="header">
+                        {we.exercise?.name ?? 'Exercise'}
+                      </Text>
+                      {detail ? <Text style={t.caption}>{detail}</Text> : null}
+                      {we.notes ? <Text style={t.muted}>{we.notes}</Text> : null}
+                    </View>
+                    <Pressable
+                      onPress={() => removeExercise(we)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove ${we.exercise?.name ?? 'exercise'}`}
+                      hitSlop={8}
+                      style={styles.removeExercise}
+                    >
+                      <Ionicons name="close" size={22} color={c.textMuted} />
+                    </Pressable>
                   </View>
 
                   <View style={styles.columns}>
@@ -279,20 +335,23 @@ export default function WorkoutScreen() {
                     <Text style={[t.column, styles.tickColumn]}>Done</Text>
                   </View>
 
-                  <View style={styles.sets}>
-                    {(we.sets ?? []).map((set, index, sets) => (
-                      <SetRow
-                        key={set.id}
-                        set={set}
-                        exerciseType={exerciseType}
-                        isCurrent={set.id === currentSetId}
-                        hints={index > 0 ? sets[index - 1] : {}}
-                        onSave={(changes) => saveSet(we, set, changes)}
-                        onDelete={() => deleteSet(we, set)}
-                        onRemove={() => void removeSet(we, set)}
-                      />
-                    ))}
-                  </View>
+                  {/* A card added mid-session shows its first sets at once; only sets added later animate. */}
+                  <LayoutAnimationConfig skipEntering>
+                    <View style={styles.sets}>
+                      {(we.sets ?? []).map((set, index, sets) => (
+                        <SetRow
+                          key={set.id}
+                          set={set}
+                          exerciseType={exerciseType}
+                          isCurrent={set.id === currentSetId}
+                          hints={index > 0 ? sets[index - 1] : {}}
+                          onSave={(changes) => saveSet(we, set, changes)}
+                          onDelete={() => deleteSet(we, set)}
+                          onRemove={() => void removeSet(we, set)}
+                        />
+                      ))}
+                    </View>
+                  </LayoutAnimationConfig>
 
                   <Button
                     title="Add set"
@@ -305,6 +364,14 @@ export default function WorkoutScreen() {
               );
             })}
 
+            <Button
+              title="Add exercise"
+              icon="add"
+              variant="secondary"
+              onPress={() => setPickerOpen(true)}
+              loading={addingExercises}
+            />
+
             <Text style={[t.caption, styles.hint]}>
               Tap a set number to switch warmup, drop or failure. Swipe a set left to delete it.
             </Text>
@@ -313,6 +380,13 @@ export default function WorkoutScreen() {
           </LayoutAnimationConfig>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ExercisePicker
+        visible={pickerOpen}
+        excludeIds={(workout.exercises ?? []).flatMap((we) => (we.exercise ? [we.exercise.id] : []))}
+        onClose={() => setPickerOpen(false)}
+        onDone={(picked) => void addExercises(picked)}
+      />
 
       {/* Finish sits under the thumb for the whole session. */}
       {!workout.is_completed ? (
@@ -380,7 +454,9 @@ const useStyles = makeStyles((c) => ({
   progressTrack: { height: 6, borderRadius: 3, backgroundColor: c.surfaceMuted, overflow: 'hidden' },
   progressFill: { height: 6, borderRadius: 3, backgroundColor: c.success },
   exercise: { gap: spacing.md },
-  exerciseHead: { gap: 2 },
+  exerciseHeadRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  exerciseHead: { gap: 2, flex: 1 },
+  removeExercise: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginTop: -10, marginRight: -10 },
   columns: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.xs + 2 },
   setColumn: { width: 36, textAlign: 'center' },
   fieldColumn: { flex: 1, textAlign: 'center' },
