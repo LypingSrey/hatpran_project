@@ -1,2 +1,6 @@
 .DS_Store
 **/.claude/settings.local.json
+
+# Local session notes and design-review files
+HANDOFF.md
+.impeccable/

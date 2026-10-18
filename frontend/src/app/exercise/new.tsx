@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
@@ -6,16 +6,31 @@ import { Button, Chip, ErrorBanner, Field, Section } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { exerciseTypeLabels } from '@/lib/format';
 import { makeStyles, spacing } from '@/lib/theme';
-import type { ExerciseType } from '@/lib/types';
+import type { ExerciseCategory, ExerciseType } from '@/lib/types';
 import { useApi } from '@/lib/useApi';
 
 const exerciseTypes = Object.keys(exerciseTypeLabels) as ExerciseType[];
+
+/** The muscle group to start on when the picker sends a category over; "other" starts on none. */
+const categoryMuscleGroups: Record<ExerciseCategory, string | null> = {
+  chest: 'chest',
+  back: 'back',
+  shoulders: 'shoulders',
+  biceps: 'biceps',
+  triceps: 'triceps',
+  legs: 'quadriceps',
+  core: 'abs',
+  cardio: 'cardio',
+  other: null,
+};
 
 export default function NewExerciseScreen() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [exerciseType, setExerciseType] = useState<ExerciseType>('weight_reps');
-  const [muscleGroupId, setMuscleGroupId] = useState<number | null>(null);
+  const { category } = useLocalSearchParams<{ category?: ExerciseCategory }>();
+  // Undefined until the user taps a muscle group, so the one the picker's category suggests shows till then.
+  const [pickedMuscleGroupId, setMuscleGroupId] = useState<number | null>();
   const [equipmentId, setEquipmentId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -23,6 +38,12 @@ export default function NewExerciseScreen() {
 
   const muscleGroups = useApi(() => api.muscleGroups());
   const equipment = useApi(() => api.equipment());
+
+  const presetSlug = category ? categoryMuscleGroups[category] : null;
+  const muscleGroupId =
+    pickedMuscleGroupId !== undefined
+      ? pickedMuscleGroupId
+      : (muscleGroups.data?.data.find((mg) => mg.slug === presetSlug)?.id ?? null);
 
   const save = async () => {
     setSubmitting(true);

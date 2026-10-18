@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Carbon\CarbonInterface;
 use Database\Factories\WorkoutFactory;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -47,6 +48,36 @@ class Workout extends Model
     public function workoutExercises(): HasMany
     {
         return $this->hasMany(WorkoutExercise::class)->orderBy('order');
+    }
+
+    /**
+     * Give each exercise the ticked sets from the last finished workout before this one that had it,
+     * so the log can show last time's numbers.
+     */
+    public function loadPreviousSets(): static
+    {
+        // ponytail: two queries per exercise; batch into one if workouts grow past a dozen or so exercises.
+        foreach ($this->workoutExercises as $workoutExercise) {
+            $workoutExercise->setRelation('previousSets', $this->previousSetsFor($workoutExercise->exercise_id));
+        }
+
+        return $this;
+    }
+
+    public function previousSetsFor(int $exerciseId): EloquentCollection
+    {
+        $completedSets = fn ($q) => $q->where('is_completed', true);
+
+        return WorkoutExercise::query()
+            ->where('exercise_id', $exerciseId)
+            ->whereHas('workout', fn ($q) => $q
+                ->where('user_id', $this->user_id)
+                ->whereNotNull('completed_at')
+                ->where('started_at', '<', $this->started_at))
+            ->whereHas('sets', $completedSets)
+            ->orderByDesc(Workout::select('started_at')->whereColumn('workouts.id', 'workout_exercises.workout_id'))
+            ->with(['sets' => $completedSets])
+            ->first()?->sets ?? new EloquentCollection;
     }
 
     public function markCompleted(?CarbonInterface $completedAt = null): void

@@ -40,6 +40,8 @@ const light = {
   onHighlight: '#5C4300',
   record: '#B7791F',
   danger: '#C0271C',
+  /** A solid red behind white text, e.g. a Delete button (5.9:1). */
+  dangerFill: '#C0271C',
   dangerSoft: '#FDECEC',
   shadow: 'rgba(15, 17, 21, 0.06)',
 };
@@ -70,6 +72,8 @@ const dark: typeof light = {
   onHighlight: '#FFE066',
   record: '#FFD60A',
   danger: '#FF6B6B',
+  // Darker than danger so white text on it stays readable (5.3:1).
+  dangerFill: '#C9302C',
   dangerSoft: '#3A1E21',
   shadow: 'transparent',
 };

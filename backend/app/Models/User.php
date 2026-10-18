@@ -42,6 +42,22 @@ class User extends Authenticatable
         return $this->hasMany(Workout::class);
     }
 
+    /**
+     * Only one workout runs at a time: starting (or reopening) another is refused until the one in progress
+     * is finished or deleted. Call inside the transaction that creates it.
+     */
+    public function ensureNoWorkoutInProgress(): void
+    {
+        // Lock the user so two quick taps can't both start one.
+        self::query()->whereKey($this->id)->lockForUpdate()->first();
+
+        $active = $this->workouts()->whereNull('completed_at')->first();
+
+        if ($active) {
+            abort(409, "Finish or delete “{$active->name}” before starting another workout.");
+        }
+    }
+
     public function workoutTemplates(): HasMany
     {
         return $this->hasMany(WorkoutTemplate::class);

@@ -4,6 +4,7 @@ import { Alert, Platform, ScrollView, Text, View } from 'react-native';
 
 import { Button, Card, ErrorBanner, Loading, Rule, useText } from '@/components/ui';
 import { api } from '@/lib/api';
+import { offerResumeIfBusy } from '@/lib/dialogs';
 import { formatDate } from '@/lib/format';
 import { makeStyles, spacing, type } from '@/lib/theme';
 import { errorMessage, useApi } from '@/lib/useApi';
@@ -37,7 +38,7 @@ export default function TemplateScreen() {
       const { data: workout } = await api.startTemplate(template.id);
       router.replace(`/workout/${workout.id}`);
     } catch (e) {
-      notify('Could not start workout', errorMessage(e));
+      if (!(await offerResumeIfBusy(e))) notify('Could not start workout', errorMessage(e));
       setStarting(false);
     }
   };

@@ -1,14 +1,14 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { FlatList, RefreshControl, Text, View } from 'react-native';
 
-import { ExerciseRecordsCard } from '@/components/ExerciseRecordsCard';
-import { EmptyState, ErrorBanner, Loading, useText } from '@/components/ui';
+import { ExerciseRecordsRow } from '@/components/ExerciseRecordsRow';
+import { EmptyState, ErrorBanner, GroupedRow, Loading, useText } from '@/components/ui';
 import { api } from '@/lib/api';
 import { groupByMuscle } from '@/lib/recordGroups';
 import { makeStyles, spacing, useColors } from '@/lib/theme';
 import { useApi } from '@/lib/useApi';
 
-/** One muscle group's records: every exercise in it that has a record, most recently improved first. */
+/** One muscle group's exercises that have a record, most recently improved first; each opens its own records. */
 export default function RecordCategoryScreen() {
   const { group } = useLocalSearchParams<{ group: string }>();
   const { data, error, isLoading, isRefreshing, refresh } = useApi(() => api.allPersonalRecords());
@@ -44,13 +44,17 @@ export default function RecordCategoryScreen() {
       ListEmptyComponent={
         error ? null : <EmptyState title="No records here yet" message="Records for this muscle group will show up here." />
       }
-      renderItem={({ item }) => <ExerciseRecordsCard group={item} />}
+      renderItem={({ item, index }) => (
+        <GroupedRow index={index} total={exercises.length}>
+          <ExerciseRecordsRow group={item} />
+        </GroupedRow>
+      )}
     />
   );
 }
 
 const useStyles = makeStyles((c) => ({
   screen: { backgroundColor: c.background },
-  list: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.xxxl, gap: spacing.md },
-  header: { gap: 2, paddingHorizontal: spacing.xs, marginBottom: spacing.sm },
+  list: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.xxxl },
+  header: { gap: 2, paddingHorizontal: spacing.xs, marginBottom: spacing.md },
 }));

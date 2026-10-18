@@ -62,7 +62,7 @@ export function SetRow({
   set: ExerciseSet;
   exerciseType: ExerciseType;
   isCurrent?: boolean;
-  /** The previous set's values, shown in empty fields and saved as-is when an empty set is ticked. */
+  /** Last time's (or else the previous set's) values, shown in empty fields and saved as-is when an empty set is ticked. */
   hints?: Partial<Record<SetField, number | null>>;
   onSave: (changes: SetInput) => Promise<void>;
   /** Long press: delete after confirming. */
@@ -136,7 +136,7 @@ export function SetRow({
       return;
     }
     tickHaptic();
-    // An empty field takes the previous set's value, so a repeat set is one tap.
+    // An empty field takes the hinted value, so repeating last time's set is one tap.
     const withHints = Object.fromEntries(
       fields.map(({ field }) => [field, parse(field, drafts[field]) ?? hints[field] ?? null]),
     ) as SetInput;

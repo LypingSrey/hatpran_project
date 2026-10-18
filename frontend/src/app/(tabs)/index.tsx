@@ -7,6 +7,7 @@ import { Avatar } from '@/components/Avatar';
 import { EmptyState, ErrorBanner, GroupedRow, Loading, ScreenTitle, useText } from '@/components/ui';
 import { WorkoutRow } from '@/components/WorkoutRow';
 import { api } from '@/lib/api';
+import { offerResume } from '@/lib/dialogs';
 import { useAuth } from '@/lib/auth';
 import { formatTime } from '@/lib/format';
 import { makeStyles, radius, spacing, type, useColors } from '@/lib/theme';
@@ -103,13 +104,13 @@ export default function WorkoutsScreen() {
               icon="add"
               title="Empty workout"
               subtitle="Start from scratch"
-              onPress={() => router.push('/workout/new')}
+              onPress={() => (inProgress[0] ? offerResume(inProgress[0]) : router.push('/workout/new'))}
             />
             <StartTile
               icon="list"
               title="From template"
               subtitle="Use a saved routine"
-              onPress={() => router.navigate('/templates')}
+              onPress={() => (inProgress[0] ? offerResume(inProgress[0]) : router.navigate('/templates'))}
             />
           </View>
 

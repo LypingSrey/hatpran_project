@@ -24,12 +24,14 @@ class Exercise extends Model
         'instructions',
         'exercise_type',
         'is_custom',
+        'secondary_categories',
     ];
 
     protected function casts(): array
     {
         return [
             'is_custom' => 'boolean',
+            'secondary_categories' => 'array',
         ];
     }
 
@@ -64,6 +66,51 @@ class Exercise extends Model
             'weight_distance' => ['max_weight', 'max_distance'],
             default => [],
         };
+    }
+
+    /**
+     * The exercise picker's categories, in the order it shows them.
+     */
+    public const CATEGORIES = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'legs', 'core', 'cardio', 'other'];
+
+    /**
+     * Which category each muscle group belongs to. Anything unlisted, or no muscle group, is "other".
+     */
+    private const MUSCLE_GROUP_CATEGORIES = [
+        'chest' => 'chest',
+        'back' => 'back',
+        'lats' => 'back',
+        'lower-back' => 'back',
+        'traps' => 'back',
+        'shoulders' => 'shoulders',
+        'biceps' => 'biceps',
+        'forearms' => 'biceps',
+        'triceps' => 'triceps',
+        'quadriceps' => 'legs',
+        'hamstrings' => 'legs',
+        'glutes' => 'legs',
+        'calves' => 'legs',
+        'abs' => 'core',
+        'obliques' => 'core',
+        'cardio' => 'cardio',
+    ];
+
+    /**
+     * The picker category the exercise is grouped under, from its muscle group.
+     */
+    public function category(): string
+    {
+        return self::MUSCLE_GROUP_CATEGORIES[$this->muscleGroup?->slug] ?? 'other';
+    }
+
+    /**
+     * Every picker category the exercise shows up under: its own first, then the secondary ones.
+     *
+     * @return list<string>
+     */
+    public function categories(): array
+    {
+        return array_values(array_unique([$this->category(), ...($this->secondary_categories ?? [])]));
     }
 
     /**

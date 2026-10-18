@@ -2,10 +2,11 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 
+import { MuscleIcon } from '@/components/MuscleIcon';
 import { EmptyState, ErrorBanner, GroupedRow, Loading, ScreenTitle, useText } from '@/components/ui';
 import { api } from '@/lib/api';
 import { groupByMuscle } from '@/lib/recordGroups';
-import { fonts, makeStyles, radius, spacing, useColors } from '@/lib/theme';
+import { makeStyles, radius, spacing, useColors } from '@/lib/theme';
 import { useApi } from '@/lib/useApi';
 
 /** Records split by muscle group (Chest, Back, …); a category opens its exercises and their records. */
@@ -64,7 +65,7 @@ export default function RecordsScreen() {
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
             >
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>{item.name.slice(0, 1)}</Text>
+                <MuscleIcon name={item.name} color={c.accent} />
               </View>
               <View style={styles.rowText}>
                 <Text style={t.bodyStrong}>{item.name}</Text>
@@ -111,6 +112,5 @@ const useStyles = makeStyles((c) => ({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeText: { fontFamily: fonts.bold, fontSize: 18, color: c.accent },
   rowText: { flex: 1, gap: 2 },
 }));

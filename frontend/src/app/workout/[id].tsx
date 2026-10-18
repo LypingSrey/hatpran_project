@@ -1,16 +1,18 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
-import Animated, { LayoutAnimationConfig } from 'react-native-reanimated';
+import { useEffect, useRef, useState } from 'react';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import Animated, { Keyframe, LayoutAnimationConfig } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ExercisePicker } from '@/components/ExercisePicker';
+import { RestTimerBar, useRestTimer } from '@/components/RestTimer';
 import { SetRow } from '@/components/SetRow';
-import { Button, Card, ErrorBanner, Loading, useText } from '@/components/ui';
+import { Button, Card, ErrorBanner, Field, Loading, useText } from '@/components/ui';
 import { api, type SetInput } from '@/lib/api';
 import { confirm, showError } from '@/lib/dialogs';
-import { easeOut, enter } from '@/lib/motion';
+import { useAuth } from '@/lib/auth';
+import { easeOut, enter, finishHaptic, motionCurve } from '@/lib/motion';
 import {
   countsTowardVolume,
   formatClock,
@@ -35,6 +37,7 @@ export default function WorkoutScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [addingExercises, setAddingExercises] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const rest = useRestTimer();
   const styles = useStyles();
   const t = useText();
   const c = useColors();
@@ -73,6 +76,15 @@ export default function WorkoutScreen() {
   // The next set to do in this session: the first unticked one, in order.
   const currentSetId = workout.is_completed ? null : (allSets.find((s) => !s.is_completed)?.id ?? null);
 
+  // The first unticked set other than the one just done, named for the rest reminder.
+  const nextSetAfter = (done: ExerciseSet): string | undefined => {
+    for (const we of workout.exercises ?? []) {
+      const next = (we.sets ?? []).find((s) => !s.is_completed && s.id !== done.id);
+      if (next) return `${we.exercise?.name ?? 'Exercise'}, set ${next.set_number}`;
+    }
+    return undefined;
+  };
+
   const replaceWorkout = (updater: (w: Workout) => Workout) =>
     setData((current) => (current ? { data: updater(current.data) } : current));
 
@@ -85,6 +97,8 @@ export default function WorkoutScreen() {
   // Show the change at once (ticks turn green without waiting on gym signal), then take the server's
   // version; if the save fails, put the set back as it was and say so.
   const saveSet = async (we: WorkoutExercise, set: ExerciseSet, changes: SetInput) => {
+    // Ticking a set during the session starts the rest before the next one.
+    if (changes.is_completed && !set.is_completed && !workout.is_completed) rest.start(nextSetAfter(set));
     replaceSets(we.id, (sets) => sets.map((s) => (s.id === set.id ? { ...s, ...changes } : s)));
     try {
       const { data: updated } = await api.updateSet(set.id, changes);
@@ -179,6 +193,8 @@ export default function WorkoutScreen() {
         const response = await api.completeWorkout(workout.id);
         setData(() => ({ data: response.data }));
         setNewRecords(response.personal_records);
+        rest.stop();
+        finishHaptic();
       } catch (e) {
         showError(e);
       } finally {
@@ -191,6 +207,7 @@ export default function WorkoutScreen() {
         `${pending} set${pending === 1 ? ' is' : 's are'} not ticked and won't count toward volume or records.`,
         'Finish',
         doFinish,
+        { destructive: false },
       );
     } else {
       await doFinish();
@@ -201,6 +218,7 @@ export default function WorkoutScreen() {
     confirm('Delete workout?', 'This workout and its sets will be permanently deleted.', 'Delete', async () => {
       try {
         await api.deleteWorkout(workout.id);
+        rest.stop();
         router.back();
       } catch (e) {
         showError(e);
@@ -229,7 +247,7 @@ export default function WorkoutScreen() {
       />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
         <ScrollView
-          contentContainerStyle={[styles.page, !workout.is_completed && { paddingBottom: 120 + insets.bottom }]}
+          contentContainerStyle={[styles.page, !workout.is_completed && { paddingBottom: 190 + insets.bottom }]}
           keyboardShouldPersistTaps="handled"
         >
           {/* Rows already there when the screen opens just appear; only sets added or removed afterwards animate. */}
@@ -241,12 +259,6 @@ export default function WorkoutScreen() {
                 {workout.template ? ` · ${workout.template.name}` : ''}
               </Text>
             </View>
-
-            {newRecords ? (
-              <Animated.View entering={enter}>
-                <FinishedNote records={newRecords} />
-              </Animated.View>
-            ) : null}
 
             <Card style={[styles.summary, compact && styles.summaryCompact]}>
               <View style={styles.summaryRow}>
@@ -344,7 +356,7 @@ export default function WorkoutScreen() {
                           set={set}
                           exerciseType={exerciseType}
                           isCurrent={set.id === currentSetId}
-                          hints={index > 0 ? sets[index - 1] : {}}
+                          hints={we.previous_sets?.[index] ?? (index > 0 ? sets[index - 1] : {})}
                           onSave={(changes) => saveSet(we, set, changes)}
                           onDelete={() => deleteSet(we, set)}
                           onRemove={() => void removeSet(we, set)}
@@ -388,9 +400,24 @@ export default function WorkoutScreen() {
         onDone={(picked) => void addExercises(picked)}
       />
 
+      {newRecords ? (
+        <WorkoutComplete
+          workout={workout}
+          volume={totalVolume}
+          setsDone={completedSets.length}
+          records={newRecords}
+          onDone={() => {
+            // Back to the Workouts tab, where the finished workout now heads the history.
+            router.dismissAll();
+            router.navigate('/');
+          }}
+        />
+      ) : null}
+
       {/* Finish sits under the thumb for the whole session. */}
       {!workout.is_completed ? (
         <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
+          <RestTimerBar timer={rest} />
           <Button title="Finish workout" onPress={finish} loading={finishing} />
         </View>
       ) : null}
@@ -398,39 +425,131 @@ export default function WorkoutScreen() {
   );
 }
 
-function FinishedNote({ records }: { records: PersonalRecord[] }) {
+// The check settles in from 80% rather than growing out of nothing.
+const badgeIn = new Keyframe({
+  0: { opacity: 0, transform: [{ scale: 0.8 }] },
+  100: { opacity: 1, transform: [{ scale: 1 }], easing: motionCurve },
+}).duration(300);
+
+/**
+ * Full-screen congratulations after Finish: the session's totals, any new records and a box for notes on how it
+ * went, then back to Workouts.
+ */
+function WorkoutComplete({
+  workout,
+  volume,
+  setsDone,
+  records,
+  onDone,
+}: {
+  workout: Workout;
+  volume: number;
+  setsDone: number;
+  records: PersonalRecord[];
+  onDone: () => void;
+}) {
   const styles = useStyles();
   const t = useText();
   const c = useColors();
+  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const firstName = user?.name.trim().split(/\s+/)[0];
+  const [notes, setNotes] = useState(workout.notes ?? '');
+  const [saving, setSaving] = useState(false);
+  const leaving = useRef(false);
+  const exercises = (workout.exercises ?? []).filter((we) => we.sets?.some((s) => s.is_completed)).length;
+  const stats = [
+    { value: formatDuration(workout.duration_seconds), label: 'Duration' },
+    { value: formatNumber(volume, 0), label: 'kg volume' },
+    { value: String(setsDone), label: setsDone === 1 ? 'set' : 'sets' },
+    { value: String(exercises), label: exercises === 1 ? 'exercise' : 'exercises' },
+  ];
 
-  if (records.length === 0) {
-    return (
-      <Card style={styles.finished}>
-        <View style={styles.finishedHead}>
-          <Ionicons name="checkmark-circle" size={24} color={c.success} />
-          <Text style={t.heading}>Workout complete</Text>
-        </View>
-        <Text style={t.muted}>No new records this time. Keep pushing.</Text>
-      </Card>
-    );
-  }
+  // Save the notes on the way out; if that fails, stay here with the text kept so it can be tried again.
+  // The ref, not `saving`, stops a second Done or Android back press that lands before the next render.
+  const done = async () => {
+    if (leaving.current) return;
+    leaving.current = true;
+    const trimmed = notes.trim() || null;
+    if (trimmed !== (workout.notes ?? null)) {
+      setSaving(true);
+      try {
+        await api.updateWorkout(workout.id, { notes: trimmed });
+      } catch (e) {
+        leaving.current = false;
+        setSaving(false);
+        showError(e);
+        return;
+      }
+    }
+    onDone();
+  };
+
   return (
-    <Card style={styles.finished}>
-      <View style={styles.finishedHead}>
-        <Ionicons name="trophy" size={22} color={c.record} />
-        <Text style={t.heading}>
-          {records.length} new personal record{records.length === 1 ? '' : 's'}
-        </Text>
-      </View>
-      {records.map((r) => (
-        <View key={r.id} style={styles.recordLine}>
-          <Text style={[t.body, styles.flex]}>
-            {r.exercise?.name} · {recordLabels[r.record_type]}
-          </Text>
-          <Text style={styles.highlighted}>{formatRecordValue(r.record_type, r.value)}</Text>
-        </View>
-      ))}
-    </Card>
+    <Modal visible animationType="fade" onRequestClose={() => void done()} statusBarTranslucent>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={[styles.done, { paddingTop: insets.top + spacing.xl, paddingBottom: Math.max(insets.bottom, spacing.lg) }]}
+      >
+        <ScrollView contentContainerStyle={styles.doneBody} keyboardShouldPersistTaps="handled">
+          <Animated.View entering={badgeIn} style={styles.doneBadge}>
+            <Ionicons name="checkmark" size={48} color={c.onSuccess} />
+          </Animated.View>
+          <Animated.View entering={enter.delay(120)} style={styles.doneHead}>
+            <Text style={[t.largeTitle, styles.center]} accessibilityRole="header">
+              Workout complete
+            </Text>
+            <Text style={[t.muted, styles.center]}>
+              {firstName ? `Nice work, ${firstName}. ` : 'Nice work. '}
+              {workout.name} is in the books.
+            </Text>
+          </Animated.View>
+
+          <Animated.View entering={enter.delay(200)} style={styles.doneCards}>
+            <Card style={styles.doneStats}>
+              {stats.map((stat) => (
+                <View key={stat.label} style={styles.doneStat}>
+                  <Text style={t.stat}>{stat.value}</Text>
+                  <Text style={t.caption}>{stat.label}</Text>
+                </View>
+              ))}
+            </Card>
+
+            <Field
+              label="How did the workout go?"
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Energy, form, anything to remember next time (optional)"
+              multiline
+              style={styles.notes}
+            />
+
+            {records.length > 0 ? (
+              <Card style={styles.finished}>
+                <View style={styles.finishedHead}>
+                  <Ionicons name="trophy" size={22} color={c.record} />
+                  <Text style={t.heading}>
+                    {records.length} new personal record{records.length === 1 ? '' : 's'}
+                  </Text>
+                </View>
+                {records.map((r) => (
+                  <View key={r.id} style={styles.recordLine}>
+                    <Text style={[t.body, styles.recordName]}>
+                      {r.exercise?.name} · {recordLabels[r.record_type]}
+                    </Text>
+                    <Text style={styles.highlighted}>{formatRecordValue(r.record_type, r.value)}</Text>
+                  </View>
+                ))}
+              </Card>
+            ) : (
+              <Text style={[t.muted, styles.center]}>No new records this time. Keep pushing.</Text>
+            )}
+          </Animated.View>
+        </ScrollView>
+
+        <Button title="Done" onPress={() => void done()} loading={saving} />
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -472,6 +591,7 @@ const useStyles = makeStyles((c) => ({
     left: 0,
     right: 0,
     bottom: 0,
+    gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     backgroundColor: c.background,
@@ -481,6 +601,23 @@ const useStyles = makeStyles((c) => ({
   finished: { gap: spacing.sm },
   finishedHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   recordLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 36 },
+  recordName: { flex: 1 },
+  done: { flex: 1, backgroundColor: c.background, paddingHorizontal: spacing.lg, gap: spacing.lg },
+  doneBody: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: spacing.xl, paddingVertical: spacing.xl },
+  doneBadge: {
+    width: 96,
+    height: 96,
+    borderRadius: radius.round,
+    backgroundColor: c.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  doneHead: { gap: spacing.sm, alignItems: 'center', maxWidth: 360 },
+  doneCards: { alignSelf: 'stretch', gap: spacing.md },
+  doneStats: { flexDirection: 'row', justifyContent: 'space-around', gap: spacing.sm, paddingVertical: spacing.lg },
+  doneStat: { alignItems: 'center', gap: 2 },
+  center: { textAlign: 'center' },
+  notes: { minHeight: 96, paddingTop: spacing.sm, textAlignVertical: 'top' },
   highlighted: {
     ...type.bodyStrong,
     fontVariant: ['tabular-nums'],

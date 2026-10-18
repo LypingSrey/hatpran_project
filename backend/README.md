@@ -12,6 +12,10 @@ library and personal records. Setup steps are in the [main README](../README.md#
 - `401` means a missing or invalid token, `403` means the item belongs to another user, and `422` returns
   validation messages in `errors`, keyed by field. `429` means a rate limit was hit; wait a minute and retry.
 - Emails are stored in lowercase, so signing up, logging in and changing email ignore letter case.
+- Tokens expire after 90 days. Change it with `SANCTUM_EXPIRATION` in minutes; `0` keeps them until sign-out.
+- Free-text fields such as notes and descriptions accept up to 5000 characters.
+- `409` means another workout is still in progress: only one runs at a time, so starting one, starting a
+  template, or reopening a finished workout is refused until it's finished or deleted.
 
 ## Endpoints
 
@@ -34,9 +38,9 @@ library and personal records. Setup steps are in the [main README](../README.md#
 | Method | Path | Does |
 | --- | --- | --- |
 | GET | `/workouts` | Your workouts, newest first. Filter with `?completed=1` or `?in_progress=1` |
-| POST | `/workouts` | Start a workout, optionally with exercises and blank sets |
-| GET | `/workouts/{id}` | A workout with its exercises, sets and totals |
-| PUT | `/workouts/{id}` | Change name, notes, `started_at` or `completed_at`. Moving a finished workout keeps its duration |
+| POST | `/workouts` | Start a workout, optionally with exercises and blank sets. `409` if one is in progress |
+| GET | `/workouts/{id}` | A workout with its exercises, sets and totals. Each exercise has `previous_sets`: the ticked sets from the last finished workout with that exercise |
+| PUT | `/workouts/{id}` | Change name, notes, `started_at` or `completed_at`. Moving a finished workout keeps its duration; clearing `completed_at` reopens it (`409` if another is in progress) |
 | POST | `/workouts/{id}/complete` | Finish a workout and return any new personal records |
 | DELETE | `/workouts/{id}` | Delete a workout and rebuild the affected records |
 | GET | `/workout-exercises/{id}/sets` | Sets for one exercise in a workout |
@@ -50,7 +54,7 @@ library and personal records. Setup steps are in the [main README](../README.md#
 | --- | --- | --- |
 | GET / POST | `/workout-templates` | List or create templates |
 | GET / PUT / DELETE | `/workout-templates/{id}` | Read, change or delete a template |
-| POST | `/workout-templates/{id}/start` | Start a workout from a template |
+| POST | `/workout-templates/{id}/start` | Start a workout from a template. `409` if one is in progress |
 
 ### Exercise library
 
@@ -60,6 +64,11 @@ library and personal records. Setup steps are in the [main README](../README.md#
 | POST | `/exercises` | Create a custom exercise |
 | GET / PUT / DELETE | `/exercises/{id}` | Read, or change and delete your own custom exercise |
 | GET | `/muscle-groups`, `/equipment` | Reference lists, plus `/{id}` for one item |
+
+When the muscle group is loaded, each exercise also has `category` (chest, back, shoulders, biceps, triceps,
+legs, core, cardio or other, derived from its muscle group) and `categories`, which adds the secondary
+categories a compound lift also works, e.g. Pull Up is `["back", "biceps"]`. The seeder sets those for built-in
+exercises; re-run `php artisan db:seed --class=ExerciseSeeder` to backfill them. It only touches built-ins.
 
 ### Personal records
 

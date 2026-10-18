@@ -41,6 +41,34 @@ class ExerciseControllerTest extends TestCase
             ->assertJsonPath('data.1.id', $mine->id);
     }
 
+    public function test_index_returns_category_from_muscle_group_plus_secondary_categories(): void
+    {
+        $pullUp = Exercise::factory()->create([
+            'name' => 'Pull Up',
+            'muscle_group_id' => MuscleGroup::factory()->create(['name' => 'Lats', 'slug' => 'lats'])->id,
+            'secondary_categories' => ['biceps'],
+        ]);
+        $squat = Exercise::factory()->create([
+            'name' => 'Squat',
+            'muscle_group_id' => MuscleGroup::factory()->create(['name' => 'Quadriceps', 'slug' => 'quadriceps'])->id,
+        ]);
+        $custom = Exercise::factory()->create(['name' => 'Zercher Carry', 'muscle_group_id' => null]);
+
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->getJson('/api/exercises')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $pullUp->id)
+            ->assertJsonPath('data.0.category', 'back')
+            ->assertJsonPath('data.0.categories', ['back', 'biceps'])
+            ->assertJsonPath('data.1.id', $squat->id)
+            ->assertJsonPath('data.1.category', 'legs')
+            ->assertJsonPath('data.1.categories', ['legs'])
+            ->assertJsonPath('data.2.id', $custom->id)
+            ->assertJsonPath('data.2.category', 'other')
+            ->assertJsonPath('data.2.categories', ['other']);
+    }
+
     public function test_index_search_is_case_insensitive(): void
     {
         Exercise::factory()->create(['name' => 'Bench Press']);

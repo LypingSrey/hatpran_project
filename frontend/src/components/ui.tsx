@@ -35,9 +35,12 @@ export const useText = makeStyles((c) => ({
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'destructive';
 
-/** Pill buttons: primary is solid blue, secondary a soft tonal fill, ghost and danger are text only. */
+/**
+ * Pill buttons: primary is solid blue, destructive solid red, secondary a soft tonal fill, ghost and danger are
+ * text only.
+ */
 export function Button({
   title,
   onPress,
@@ -60,7 +63,7 @@ export function Button({
   const reduceMotion = useReduceMotion();
   const [pressed, setPressed] = useState(false);
   const isDisabled = disabled || loading;
-  const textColor = { primary: c.onAccent, secondary: c.accent, ghost: c.accent, danger: c.danger }[variant];
+  const textColor = { primary: c.onAccent, secondary: c.accent, ghost: c.accent, danger: c.danger, destructive: c.onAccent }[variant];
   return (
     <AnimatedPressable
       accessibilityRole="button"
@@ -224,7 +227,18 @@ export function EmptyState({ title, message, action }: { title: string; message?
 }
 
 /** A filter or choice pill. Selected shows a check as well as color, so state never rests on color alone. */
-export function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+export function Chip({
+  label,
+  selected,
+  onPress,
+  count,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+  /** Shown after the label, e.g. how many items the filter matches. */
+  count?: number;
+}) {
   const styles = useStyles();
   const c = useColors();
   const reduceMotion = useReduceMotion();
@@ -248,6 +262,9 @@ export function Chip({ label, selected, onPress }: { label: string; selected: bo
     >
       {selected ? <Ionicons name="checkmark" size={16} color={c.onAccent} /> : null}
       <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
+      {count !== undefined ? (
+        <Text style={[styles.chipCount, selected && styles.chipTextSelected]}>{count}</Text>
+      ) : null}
     </AnimatedPressable>
   );
 }
@@ -267,6 +284,7 @@ const useStyles = makeStyles((c) => ({
   secondary: { backgroundColor: c.surfaceMuted, minHeight: 48 },
   ghost: { backgroundColor: 'transparent', minHeight: 44, paddingHorizontal: spacing.md },
   danger: { backgroundColor: 'transparent', minHeight: 44, paddingHorizontal: spacing.md },
+  destructive: { backgroundColor: c.dangerFill },
   pressed: { opacity: 0.6 },
   disabled: { opacity: 0.4 },
   buttonText: { ...type.bodyStrong },
@@ -348,4 +366,5 @@ const useStyles = makeStyles((c) => ({
   chipSelected: { backgroundColor: c.accentFill },
   chipText: { ...type.label, color: c.text },
   chipTextSelected: { color: c.onAccent, fontFamily: type.bodyStrong.fontFamily },
+  chipCount: { ...type.caption, color: c.textMuted, fontVariant: ['tabular-nums'] },
 }));

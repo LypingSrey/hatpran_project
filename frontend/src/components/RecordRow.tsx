@@ -22,16 +22,14 @@ function editRoute(record: PersonalRecord): Href | null {
  * One record line: what it is and its value. Tapping shows where and when it was set, with a button
  * to edit the manual entry or open the workout, since those sets are what the record is computed from.
  */
-export function RecordRow({ record, showExercise = false }: { record: PersonalRecord; showExercise?: boolean }) {
+export function RecordRow({ record }: { record: PersonalRecord }) {
   const [expanded, setExpanded] = useState(false);
   const styles = useStyles();
   const t = useText();
   const c = useColors();
   const route = editRoute(record);
   const isManual = record.source === 'manual';
-  const label = showExercise
-    ? `${record.exercise?.name ?? 'Exercise'} · ${recordLabels[record.record_type]}`
-    : recordLabels[record.record_type];
+  const label = recordLabels[record.record_type];
   const origin = isManual ? 'Entered by you' : (record.workout?.name ?? 'From a workout');
   // Manual entries are stored at midday as a placeholder, so only their date means anything.
   const when = isManual
