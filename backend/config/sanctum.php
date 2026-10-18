@@ -50,8 +50,8 @@ return [
     |
     */
 
-    // Minutes a sign-in token lasts: 90 days unless set. 0 keeps tokens until sign-out.
-    'expiration' => (int) env('SANCTUM_EXPIRATION', 129600) ?: null,
+    // Minutes a sign-in token lasts: 90 days unless set (an empty value counts as unset). 0 keeps tokens until sign-out.
+    'expiration' => (int) (filled(env('SANCTUM_EXPIRATION')) ? env('SANCTUM_EXPIRATION') : 129600) ?: null,
 
     /*
     |--------------------------------------------------------------------------

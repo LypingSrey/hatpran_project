@@ -17,6 +17,17 @@ class Workout extends Model
     /** @use HasFactory<WorkoutFactory> */
     use HasFactory;
 
+    /**
+     * What every API response for a single workout loads. The app swaps these responses into the open
+     * workout, so each must carry the same fields (muscle group and equipment drive each exercise's caption).
+     */
+    public const RESPONSE_RELATIONS = [
+        'workoutExercises.exercise.muscleGroup',
+        'workoutExercises.exercise.equipment',
+        'workoutExercises.sets',
+        'template',
+    ];
+
     protected $fillable = [
         'user_id',
         'workout_template_id',
@@ -76,6 +87,9 @@ class Workout extends Model
                 ->where('started_at', '<', $this->started_at))
             ->whereHas('sets', $completedSets)
             ->orderByDesc(Workout::select('started_at')->whereColumn('workouts.id', 'workout_exercises.workout_id'))
+            // Ties: the later-saved workout, then its first block of this exercise.
+            ->orderByDesc('workout_id')
+            ->orderBy('order')
             ->with(['sets' => $completedSets])
             ->first()?->sets ?? new EloquentCollection;
     }

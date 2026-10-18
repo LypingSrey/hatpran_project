@@ -104,7 +104,7 @@ class WorkoutController extends Controller
         });
 
         return new WorkoutResource(
-            $workout->load(['workoutExercises.exercise', 'workoutExercises.sets', 'template'])
+            $workout->load(Workout::RESPONSE_RELATIONS)
         );
     }
 
@@ -115,7 +115,7 @@ class WorkoutController extends Controller
         }
 
         return new WorkoutResource(
-            $workout->load(['workoutExercises.exercise.muscleGroup', 'workoutExercises.exercise.equipment', 'workoutExercises.sets', 'template'])
+            $workout->load(Workout::RESPONSE_RELATIONS)
                 ->loadPreviousSets()
         );
     }
@@ -179,7 +179,7 @@ class WorkoutController extends Controller
         });
 
         return (new WorkoutResource(
-            $workout->load(['workoutExercises.exercise', 'workoutExercises.sets', 'template'])
+            $workout->load(Workout::RESPONSE_RELATIONS)
         ))->additional(['personal_records' => PersonalRecordResource::collection($personalRecords)]);
     }
 
@@ -221,7 +221,7 @@ class WorkoutController extends Controller
         }
 
         return (new WorkoutResource(
-            $workout->load(['workoutExercises.exercise', 'workoutExercises.sets', 'template'])->loadPreviousSets()
+            $workout->load(Workout::RESPONSE_RELATIONS)->loadPreviousSets()
         ))->additional(['personal_records' => PersonalRecordResource::collection($personalRecords)]);
     }
 }

@@ -24,7 +24,10 @@ class ManualRecordController extends Controller
         $records = $request->user()
             ->manualRecords()
             ->with('exercise')
-            ->when($request->integer('exercise_id'), fn ($q, $id) => $q->where('exercise_id', $id))
+            // Only the record types the exercise tracks now; ones kept from an earlier type stay hidden.
+            // ponytail: unfiltered without exercise_id (the app always sends it); filter by type per row if that changes.
+            ->when($request->integer('exercise_id'), fn ($q, $id) => $q->where('exercise_id', $id)
+                ->whereIn('record_type', Exercise::find($id)?->personalRecordTypes() ?? []))
             ->latest('achieved_at')
             ->latest('id')
             ->paginate($this->perPage($request, 50));

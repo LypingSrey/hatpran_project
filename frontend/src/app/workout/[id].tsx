@@ -26,6 +26,7 @@ import {
 } from '@/lib/format';
 import { fonts, makeStyles, radius, spacing, type, useColors } from '@/lib/theme';
 import type { Exercise, ExerciseSet, PersonalRecord, Workout, WorkoutExercise } from '@/lib/types';
+import { previousSetHint } from '@/lib/previousSets';
 import { useApi } from '@/lib/useApi';
 
 export default function WorkoutScreen() {
@@ -37,7 +38,7 @@ export default function WorkoutScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [addingExercises, setAddingExercises] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const rest = useRestTimer();
+  const rest = useRestTimer(workoutId, data?.data ? !data.data.is_completed : false);
   const styles = useStyles();
   const t = useText();
   const c = useColors();
@@ -98,13 +99,16 @@ export default function WorkoutScreen() {
   // version; if the save fails, put the set back as it was and say so.
   const saveSet = async (we: WorkoutExercise, set: ExerciseSet, changes: SetInput) => {
     // Ticking a set during the session starts the rest before the next one.
-    if (changes.is_completed && !set.is_completed && !workout.is_completed) rest.start(nextSetAfter(set));
+    const startsRest = changes.is_completed && !set.is_completed && !workout.is_completed;
+    if (startsRest) rest.start(nextSetAfter(set));
     replaceSets(we.id, (sets) => sets.map((s) => (s.id === set.id ? { ...s, ...changes } : s)));
     try {
       const { data: updated } = await api.updateSet(set.id, changes);
       replaceSets(we.id, (sets) => sets.map((s) => (s.id === updated.id ? updated : s)));
     } catch (e) {
       replaceSets(we.id, (sets) => sets.map((s) => (s.id === set.id ? set : s)));
+      // The set wasn't saved, so neither is the rest it started (or its "rest is over" reminder).
+      if (startsRest) rest.stop();
       showError(e);
     }
   };
@@ -356,7 +360,7 @@ export default function WorkoutScreen() {
                           set={set}
                           exerciseType={exerciseType}
                           isCurrent={set.id === currentSetId}
-                          hints={we.previous_sets?.[index] ?? (index > 0 ? sets[index - 1] : {})}
+                          hints={previousSetHint(sets, index, we.previous_sets) ?? (index > 0 ? sets[index - 1] : {})}
                           onSave={(changes) => saveSet(we, set, changes)}
                           onDelete={() => deleteSet(we, set)}
                           onRemove={() => void removeSet(we, set)}

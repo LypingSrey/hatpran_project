@@ -247,7 +247,7 @@ class WorkoutControllerTest extends TestCase
             ->assertJsonPath('data.total_sets', 2);
     }
 
-    public function test_show_includes_each_exercises_muscle_group_and_equipment(): void
+    public function test_show_and_complete_include_each_exercises_muscle_group_and_equipment(): void
     {
         $user = User::factory()->create();
         $workout = Workout::factory()->for($user)->inProgress()->create();
@@ -256,10 +256,12 @@ class WorkoutControllerTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $this->getJson("/api/workouts/{$workout->id}")
-            ->assertOk()
-            ->assertJsonPath('data.exercises.0.exercise.muscle_group.name', $exercise->muscleGroup->name)
-            ->assertJsonPath('data.exercises.0.exercise.equipment.name', $exercise->equipment->name);
+        // The app replaces the screen's workout with the complete() response, so it must match show().
+        foreach ([$this->getJson("/api/workouts/{$workout->id}"), $this->postJson("/api/workouts/{$workout->id}/complete")] as $response) {
+            $response->assertOk()
+                ->assertJsonPath('data.exercises.0.exercise.muscle_group.name', $exercise->muscleGroup->name)
+                ->assertJsonPath('data.exercises.0.exercise.equipment.name', $exercise->equipment->name);
+        }
     }
 
     public function test_show_forbids_another_users_workout_with_403(): void
@@ -563,6 +565,28 @@ class WorkoutControllerTest extends TestCase
         $this->getJson("/api/workouts/{$older->id}")
             ->assertOk()
             ->assertJsonCount(0, 'data.exercises.0.previous_sets');
+    }
+
+    public function test_previous_sets_come_from_the_first_block_when_last_session_had_the_exercise_twice(): void
+    {
+        $user = User::factory()->create();
+        $exercise = Exercise::factory()->create(['user_id' => null]);
+        $last = Workout::factory()->for($user)->create(['started_at' => now()->subDay(), 'completed_at' => now()->subDay()]);
+
+        // The back-off block is saved first, so row order alone would pick it.
+        ExerciseSet::factory()->for(WorkoutExercise::factory()->for($last)->create(['exercise_id' => $exercise->id, 'order' => 1]))
+            ->create(['set_number' => 1, 'weight_kg' => 60]);
+        ExerciseSet::factory()->for(WorkoutExercise::factory()->for($last)->create(['exercise_id' => $exercise->id, 'order' => 0]))
+            ->create(['set_number' => 1, 'weight_kg' => 100]);
+
+        $today = Workout::factory()->for($user)->inProgress()->create();
+        WorkoutExercise::factory()->for($today)->create(['exercise_id' => $exercise->id]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson("/api/workouts/{$today->id}")
+            ->assertOk()
+            ->assertJsonPath('data.exercises.0.previous_sets.0.weight_kg', 100);
     }
 
     public function test_only_one_workout_can_be_in_progress_at_a_time(): void

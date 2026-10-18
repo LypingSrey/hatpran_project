@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\WorkoutResource;
 use App\Http\Resources\WorkoutTemplateResource;
 use App\Models\User;
+use App\Models\Workout;
 use App\Models\WorkoutTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -135,7 +136,7 @@ class WorkoutTemplateController extends Controller
         });
 
         return new WorkoutResource(
-            $workout->load(['workoutExercises.exercise', 'workoutExercises.sets', 'template'])
+            $workout->load(Workout::RESPONSE_RELATIONS)
         );
     }
 

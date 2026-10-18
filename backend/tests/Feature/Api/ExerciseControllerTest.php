@@ -251,7 +251,7 @@ class ExerciseControllerTest extends TestCase
         $this->assertDatabaseHas('exercises', ['id' => $exercise->id, 'name' => 'Renamed', 'description' => null]);
     }
 
-    public function test_update_changing_type_rebuilds_records_and_drops_manual_records_it_no_longer_tracks(): void
+    public function test_update_changing_type_rebuilds_records_and_hides_manual_records_it_no_longer_tracks(): void
     {
         $user = User::factory()->create();
         $exercise = Exercise::factory()->custom()->for($user)->create(['exercise_type' => 'weight_reps']);
@@ -268,7 +268,18 @@ class ExerciseControllerTest extends TestCase
             ['max_duration'],
             PersonalRecord::query()->where('exercise_id', $exercise->id)->pluck('record_type')->all(),
         );
-        $this->assertModelMissing($weightEntry);
+        $this->getJson("/api/manual-records?exercise_id={$exercise->id}")->assertOk()->assertJsonCount(0, 'data');
+
+        // Changing the type back brings the hand-entered best back.
+        $this->putJson("/api/exercises/{$exercise->id}", ['exercise_type' => 'weight_reps'])->assertOk();
+
+        $this->getJson("/api/manual-records?exercise_id={$exercise->id}")
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $weightEntry->id);
+        $this->assertSame(
+            $weightEntry->id,
+            PersonalRecord::query()->where('exercise_id', $exercise->id)->where('record_type', 'max_weight')->value('manual_record_id'),
+        );
     }
 
     public function test_update_without_type_change_keeps_records(): void

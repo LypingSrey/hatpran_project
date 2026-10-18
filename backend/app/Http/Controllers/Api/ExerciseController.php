@@ -75,11 +75,9 @@ class ExerciseController extends Controller
         DB::transaction(function () use ($exercise, $validated) {
             $exercise->update($validated);
 
-            // A new type tracks different records (e.g. duration instead of weight), so drop hand-entered
-            // bests it no longer tracks and rebuild the records from history.
+            // A new type tracks different records (e.g. duration instead of weight), so rebuild them from history.
+            // Hand-entered bests the new type doesn't track are kept but hidden, and come back if the type does.
             if ($exercise->wasChanged('exercise_type')) {
-                $exercise->manualRecords()->whereNotIn('record_type', $exercise->personalRecordTypes())->delete();
-
                 PersonalRecord::recalculate($exercise->user_id, [$exercise->id]);
             }
         });

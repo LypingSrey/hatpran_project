@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Notifications from 'expo-notifications';
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -19,12 +20,19 @@ const CHANNEL = 'rest-timer';
 const TITLE = 'Rest is over';
 const isNative = Platform.OS !== 'web';
 
-// Kept outside the hook so leaving the workout screen and coming back resumes the countdown.
-// ponytail: one shared rest, fine while only one workout can be in progress; key by workout id if that changes.
+// Kept outside the hook so leaving the workout screen and coming back resumes the countdown. It belongs to one
+// workout, so another workout's screen (a past one, or the next after this one was finished on another device)
+// doesn't pick it up. Only one rest runs at a time, since only one workout can be in progress.
 const reminder: { current: Promise<string | null> | null } = { current: null };
-const kept = { endsAt: null as number | null, nextUp: 'Time for your next set.' };
+const kept = { workoutId: null as number | null, endsAt: null as number | null, nextUp: 'Time for your next set.' };
 
-// While the workout screen is open it shows the reminder itself; the banner is for when the lifter is elsewhere.
+/** Clear a workout's kept rest, leaving another workout's alone. */
+function clearKept(workoutId: number) {
+  if (kept.workoutId === workoutId) kept.endsAt = null;
+}
+
+// While an in-progress workout's screen is in front it shows the reminder itself; the banner and sound are for
+// when the lifter is anywhere else, including a screen opened on top of it.
 let screenOpen = false;
 if (isNative) {
   Notifications.setNotificationHandler({
@@ -85,18 +93,16 @@ export type RestTimer = ReturnType<typeof useRestTimer>;
  * The rest between sets. `start` runs a countdown of the chosen length (2 minutes unless changed; the choice is
  * remembered) and schedules a notification for its end; `stop` cancels both.
  */
-export function useRestTimer() {
+export function useRestTimer(workoutId: number, inProgress: boolean) {
   const [seconds, setSeconds] = useState(DEFAULT_SECONDS);
+  const ownsKept = kept.workoutId === workoutId;
   // A rest that ran out while away isn't brought back; its notification already went off.
-  const [endsAt, setEndsAt] = useState(() => (kept.endsAt !== null && kept.endsAt > Date.now() ? kept.endsAt : null));
+  const [endsAt, setEndsAt] = useState(() =>
+    ownsKept && kept.endsAt !== null && kept.endsAt > Date.now() ? kept.endsAt : null,
+  );
   const [now, setNow] = useState(() => Date.now());
   const [over, setOver] = useState(false);
-  const [nextUp, setNextUp] = useState(kept.nextUp);
-
-  useEffect(() => {
-    kept.endsAt = endsAt;
-    kept.nextUp = nextUp;
-  }, [endsAt, nextUp]);
+  const [nextUp, setNextUp] = useState(ownsKept ? kept.nextUp : 'Time for your next set.');
 
   useEffect(() => {
     void getItem(STORAGE_KEY).then((saved) => {
@@ -105,12 +111,15 @@ export function useRestTimer() {
     });
   }, []);
 
-  useEffect(() => {
-    screenOpen = true;
-    return () => {
-      screenOpen = false;
-    };
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      if (!inProgress) return;
+      screenOpen = true;
+      return () => {
+        screenOpen = false;
+      };
+    }, [inProgress]),
+  );
 
   const cancelReminder = () => {
     const pending = reminder.current;
@@ -122,8 +131,10 @@ export function useRestTimer() {
 
   const run = (length: number, body: string) => {
     cancelReminder();
+    const end = Date.now() + length * 1000;
     setNow(Date.now());
-    setEndsAt(Date.now() + length * 1000);
+    setEndsAt(end);
+    Object.assign(kept, { workoutId, endsAt: end, nextUp: body });
     setOver(false);
     reminder.current = scheduleReminder(length, body);
     askWebPermission();
@@ -139,6 +150,7 @@ export function useRestTimer() {
   const stop = () => {
     cancelReminder();
     setEndsAt(null);
+    clearKept(workoutId);
     setOver(false);
   };
 
@@ -158,13 +170,14 @@ export function useRestTimer() {
       if (current >= endsAt) {
         reminder.current = null;
         setEndsAt(null);
+        clearKept(workoutId);
         setOver(true);
         finishHaptic();
         webNotify(nextUp);
       }
     }, 250);
     return () => clearInterval(timer);
-  }, [endsAt, nextUp]);
+  }, [endsAt, nextUp, workoutId]);
 
   const remaining = endsAt === null ? seconds : Math.max(0, Math.ceil((endsAt - now) / 1000));
   return { seconds, remaining, running: endsAt !== null, over, nextUp, start, stop, choose };
