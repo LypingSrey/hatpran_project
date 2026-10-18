@@ -35,7 +35,7 @@ class WorkoutExerciseController extends Controller
                     fn ($q) => $q->whereNull('user_id')->orWhere('user_id', $user->id)
                 ),
             ],
-            'notes' => 'nullable|string',
+            'notes' => 'nullable|string|max:5000',
             'sets' => 'nullable|array|max:100',
             'sets.*.set_type' => 'nullable|in:normal,warmup,drop,failure',
             ...ExerciseSet::measurementRules('sets.*.'),
@@ -71,6 +71,8 @@ class WorkoutExerciseController extends Controller
             return $workoutExercise;
         });
 
+        $workoutExercise->setRelation('previousSets', $workout->previousSetsFor($workoutExercise->exercise_id));
+
         return new WorkoutExerciseResource(
             $workoutExercise->load(['exercise.muscleGroup', 'exercise.equipment', 'sets'])
         );
@@ -84,7 +86,7 @@ class WorkoutExerciseController extends Controller
 
         $validated = $request->validate([
             'order' => 'sometimes|integer|min:0',
-            'notes' => 'nullable|string',
+            'notes' => 'nullable|string|max:5000',
         ]);
 
         $workoutExercise->update($validated);

@@ -50,9 +50,8 @@ return [
     |
     */
 
-    // Minutes a sign-in token lasts. Empty keeps tokens until sign-out (the old behaviour);
-    // e.g. 129600 signs a phone out after 90 days.
-    'expiration' => env('SANCTUM_EXPIRATION') ? (int) env('SANCTUM_EXPIRATION') : null,
+    // Minutes a sign-in token lasts: 90 days unless set (an empty value counts as unset). 0 keeps tokens until sign-out.
+    'expiration' => (int) (filled(env('SANCTUM_EXPIRATION')) ? env('SANCTUM_EXPIRATION') : 129600) ?: null,
 
     /*
     |--------------------------------------------------------------------------

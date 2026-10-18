@@ -5,6 +5,7 @@ import { Alert, FlatList, Platform, Pressable, RefreshControl, Text, View } from
 
 import { Button, Card, EmptyState, ErrorBanner, Loading, ScreenTitle, useText } from '@/components/ui';
 import { api } from '@/lib/api';
+import { offerResumeIfBusy } from '@/lib/dialogs';
 import { formatDate } from '@/lib/format';
 import { makeStyles, radius, spacing, useColors } from '@/lib/theme';
 import type { WorkoutTemplate } from '@/lib/types';
@@ -23,6 +24,7 @@ export default function TemplatesScreen() {
       const { data: workout } = await api.startTemplate(template.id);
       router.push(`/workout/${workout.id}`);
     } catch (e) {
+      if (await offerResumeIfBusy(e)) return;
       const message = errorMessage(e);
       if (Platform.OS === 'web') globalThis.alert?.(message);
       else Alert.alert('Could not start workout', message);

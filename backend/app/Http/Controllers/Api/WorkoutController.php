@@ -40,7 +40,7 @@ class WorkoutController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'notes' => 'nullable|string',
+            'notes' => 'nullable|string|max:5000',
             'workout_template_id' => [
                 'nullable',
                 'integer',
@@ -55,7 +55,7 @@ class WorkoutController extends Controller
                 ),
             ],
             'exercises.*.order' => 'nullable|integer|min:0',
-            'exercises.*.notes' => 'nullable|string',
+            'exercises.*.notes' => 'nullable|string|max:5000',
             'exercises.*.sets' => 'nullable|array',
             'exercises.*.sets.*.set_type' => 'nullable|in:normal,warmup,drop,failure',
             ...ExerciseSet::measurementRules('exercises.*.sets.*.'),
@@ -66,6 +66,8 @@ class WorkoutController extends Controller
         $exercises = $request->input('exercises') ?? [];
 
         $workout = DB::transaction(function () use ($user, $validated, $exercises) {
+            $user->ensureNoWorkoutInProgress();
+
             $workout = $user->workouts()->create([
                 'name' => $validated['name'],
                 'notes' => $validated['notes'] ?? null,
@@ -102,7 +104,7 @@ class WorkoutController extends Controller
         });
 
         return new WorkoutResource(
-            $workout->load(['workoutExercises.exercise', 'workoutExercises.sets', 'template'])
+            $workout->load(Workout::RESPONSE_RELATIONS)
         );
     }
 
@@ -113,7 +115,8 @@ class WorkoutController extends Controller
         }
 
         return new WorkoutResource(
-            $workout->load(['workoutExercises.exercise.muscleGroup', 'workoutExercises.exercise.equipment', 'workoutExercises.sets', 'template'])
+            $workout->load(Workout::RESPONSE_RELATIONS)
+                ->loadPreviousSets()
         );
     }
 
@@ -126,7 +129,7 @@ class WorkoutController extends Controller
         // Times can't be in the future; a few minutes' slack covers a phone clock that runs slightly fast.
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
-            'notes' => 'nullable|string',
+            'notes' => 'nullable|string|max:5000',
             'started_at' => 'sometimes|required|date|before_or_equal:+5 minutes',
             'completed_at' => 'nullable|date|before_or_equal:+5 minutes',
         ], [
@@ -149,6 +152,10 @@ class WorkoutController extends Controller
 
             if (array_key_exists('completed_at', $validated)) {
                 if ($validated['completed_at'] === null) {
+                    if ($wasCompleted) {
+                        $workout->user->ensureNoWorkoutInProgress();
+                    }
+
                     $workout->update(['completed_at' => null, 'duration_seconds' => null]);
                 } else {
                     $workout->markCompleted(Carbon::parse($validated['completed_at']));
@@ -172,7 +179,7 @@ class WorkoutController extends Controller
         });
 
         return (new WorkoutResource(
-            $workout->load(['workoutExercises.exercise', 'workoutExercises.sets', 'template'])
+            $workout->load(Workout::RESPONSE_RELATIONS)
         ))->additional(['personal_records' => PersonalRecordResource::collection($personalRecords)]);
     }
 
@@ -214,7 +221,7 @@ class WorkoutController extends Controller
         }
 
         return (new WorkoutResource(
-            $workout->load(['workoutExercises.exercise', 'workoutExercises.sets', 'template'])
+            $workout->load(Workout::RESPONSE_RELATIONS)->loadPreviousSets()
         ))->additional(['personal_records' => PersonalRecordResource::collection($personalRecords)]);
     }
 }

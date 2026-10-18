@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api;
 
 use App\Models\Equipment;
+use App\Models\Exercise;
 use App\Models\MuscleGroup;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
@@ -70,5 +71,17 @@ class ReferenceDataTest extends TestCase
         $this->assertDatabaseMissing('exercises', ['muscle_group_id' => null]);
         $this->assertDatabaseMissing('exercises', ['equipment_id' => null]);
         $this->assertDatabaseCount('exercises', 74);
+    }
+
+    public function test_seeder_tags_secondary_categories_and_leaves_a_same_named_custom_exercise_alone(): void
+    {
+        $custom = Exercise::factory()->custom()->create(['name' => 'Pull Up', 'muscle_group_id' => null]);
+
+        $this->seed(DatabaseSeeder::class);
+
+        $pullUp = Exercise::query()->whereNull('user_id')->where('name', 'Pull Up')->sole();
+        $this->assertSame(['back', 'biceps'], $pullUp->categories());
+        $this->assertNull($custom->fresh()->secondary_categories);
+        $this->assertNull($custom->fresh()->muscle_group_id);
     }
 }

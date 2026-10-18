@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\WorkoutResource;
 use App\Http\Resources\WorkoutTemplateResource;
 use App\Models\User;
+use App\Models\Workout;
 use App\Models\WorkoutTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -32,7 +33,7 @@ class WorkoutTemplateController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'notes' => 'nullable|string',
+            'notes' => 'nullable|string|max:5000',
             'exercises' => 'required|array|min:1',
             ...$this->exerciseRules($request->user()),
         ]);
@@ -68,7 +69,7 @@ class WorkoutTemplateController extends Controller
 
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
-            'notes' => 'nullable|string',
+            'notes' => 'nullable|string|max:5000',
             'exercises' => 'sometimes|array|min:1',
             ...$this->exerciseRules($request->user()),
         ]);
@@ -103,6 +104,8 @@ class WorkoutTemplateController extends Controller
         }
 
         $workout = DB::transaction(function () use ($request, $workoutTemplate) {
+            $request->user()->ensureNoWorkoutInProgress();
+
             $workout = $request->user()->workouts()->create([
                 'name' => $workoutTemplate->name,
                 'notes' => $workoutTemplate->notes,
@@ -133,7 +136,7 @@ class WorkoutTemplateController extends Controller
         });
 
         return new WorkoutResource(
-            $workout->load(['workoutExercises.exercise', 'workoutExercises.sets', 'template'])
+            $workout->load(Workout::RESPONSE_RELATIONS)
         );
     }
 
@@ -155,7 +158,7 @@ class WorkoutTemplateController extends Controller
             'exercises.*.order' => 'nullable|integer|min:0',
             'exercises.*.target_sets' => 'nullable|integer|min:1|max:100',
             'exercises.*.target_reps' => 'nullable|integer|min:1|max:10000',
-            'exercises.*.notes' => 'nullable|string',
+            'exercises.*.notes' => 'nullable|string|max:5000',
         ];
     }
 

@@ -1,4 +1,4 @@
-import type { ExerciseType, RecordType } from './types';
+import type { ExerciseCategory, ExerciseType, RecordType } from './types';
 
 export function formatDuration(totalSeconds: number | null | undefined): string {
   if (totalSeconds == null) return '—';
@@ -135,6 +135,19 @@ export const exerciseTypeLabels: Record<ExerciseType, string> = {
   duration: 'Duration',
   distance_duration: 'Distance & duration',
   weight_distance: 'Weight & distance',
+};
+
+/** The exercise picker's groups, in the order it shows them. */
+export const exerciseCategoryLabels: Record<ExerciseCategory, string> = {
+  chest: 'Chest',
+  back: 'Back',
+  shoulders: 'Shoulders',
+  biceps: 'Biceps',
+  triceps: 'Triceps',
+  legs: 'Legs',
+  core: 'Core',
+  cardio: 'Cardio',
+  other: 'Other',
 };
 
 export type SetField = 'weight_kg' | 'reps' | 'distance_meters' | 'duration_seconds';

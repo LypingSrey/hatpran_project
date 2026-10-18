@@ -155,6 +155,8 @@ export const api = {
 
   exercises: (params: { search?: string; muscle_group_id?: number; custom_only?: boolean; page?: number } = {}) =>
     request<Paginated<Exercise>>('GET', '/exercises' + query({ per_page: 100, ...params })),
+  /** Every exercise the user can pick, across all pages, for the picker to group and search itself. */
+  allExercises: () => fetchAllPages((page) => api.exercises({ page })),
   exercise: (id: number) => request<Data<Exercise>>('GET', `/exercises/${id}`),
   createExercise: (body: {
     name: string;

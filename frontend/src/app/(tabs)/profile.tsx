@@ -5,12 +5,13 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native'
 
 import { AppearanceMenu } from '@/components/AppearanceMenu';
 import { Avatar } from '@/components/Avatar';
-import { RecordRow } from '@/components/RecordRow';
+import { ExerciseRecordsRow } from '@/components/ExerciseRecordsRow';
 import { Button, Card, ErrorBanner, Rule, ScreenTitle, Section, useText } from '@/components/ui';
 import { WorkoutRow } from '@/components/WorkoutRow';
 import { API_URL, api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDuration, formatNumber } from '@/lib/format';
+import { groupByExercise } from '@/lib/recordGroups';
 import { makeStyles, spacing, type, useColors } from '@/lib/theme';
 import { useApi } from '@/lib/useApi';
 
@@ -21,7 +22,8 @@ export default function ProfileScreen() {
   const [signingOut, setSigningOut] = useState(false);
   const stats = useApi(() => api.stats());
   const recent = useApi(() => api.workouts({ completed: true, per_page: RECENT_COUNT }));
-  const records = useApi(() => api.personalRecords({ per_page: RECENT_COUNT }));
+  // Every record, so each exercise's count is complete; the card shows the most recently improved few.
+  const records = useApi(() => api.allPersonalRecords());
   const styles = useStyles();
   const t = useText();
   const c = useColors();
@@ -30,7 +32,7 @@ export default function ProfileScreen() {
   const error = stats.error ?? recent.error ?? records.error;
   const totals = stats.data?.data;
   const workouts = recent.data?.data ?? [];
-  const recordList = records.data?.data ?? [];
+  const recordExercises = groupByExercise(records.data ?? []).slice(0, RECENT_COUNT);
   const memberSince = user ? new Date(user.created_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : '';
 
   const totalRows: [string, string][] = [
@@ -113,19 +115,19 @@ export default function ProfileScreen() {
 
       <Section
         title="Personal records"
-        action={recordList.length > 0 ? <SeeAll onPress={() => router.navigate('/records')} /> : null}
+        action={recordExercises.length > 0 ? <SeeAll onPress={() => router.navigate('/records')} /> : null}
         style={styles.section}
       >
         <Card flush>
-          {recordList.length === 0 && !records.isLoading ? (
+          {recordExercises.length === 0 && !records.isLoading ? (
             <Text style={[t.muted, styles.emptyLine]}>
               No records yet. Finish a workout, or add a best you set before using HatPran.
             </Text>
           ) : null}
-          {recordList.map((r, index) => (
-            <Fragment key={r.id}>
+          {recordExercises.map((group, index) => (
+            <Fragment key={group.exerciseId}>
               {index > 0 ? <Rule /> : null}
-              <RecordRow record={r} showExercise />
+              <ExerciseRecordsRow group={group} />
             </Fragment>
           ))}
           <Rule inset={0} />

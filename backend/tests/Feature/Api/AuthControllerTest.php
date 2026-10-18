@@ -11,6 +11,44 @@ class AuthControllerTest extends TestCase
 {
     use LazilyRefreshDatabase;
 
+    /** Read config/sanctum.php's token lifetime with SANCTUM_EXPIRATION set to the given value, or unset. */
+    private function expirationFor(?string $value): ?int
+    {
+        // env() reads $_SERVER, $_ENV and getenv(), and .env or the shell may have filled any of them.
+        $key = 'SANCTUM_EXPIRATION';
+        $previous = [$_SERVER[$key] ?? null, $_ENV[$key] ?? null, getenv($key)];
+        unset($_SERVER[$key], $_ENV[$key]);
+        putenv($key);
+        if ($value !== null) {
+            $_SERVER[$key] = $value;
+        }
+
+        try {
+            return (require config_path('sanctum.php'))['expiration'];
+        } finally {
+            unset($_SERVER[$key], $_ENV[$key]);
+            [$server, $env, $getenv] = $previous;
+            if ($server !== null) {
+                $_SERVER[$key] = $server;
+            }
+            if ($env !== null) {
+                $_ENV[$key] = $env;
+            }
+            if ($getenv !== false) {
+                putenv("{$key}={$getenv}");
+            }
+        }
+    }
+
+    public function test_tokens_expire_after_90_days_unless_set_and_0_means_never(): void
+    {
+        $this->assertSame(129600, $this->expirationFor(null));
+        // An empty line, as the old .env.example shipped, still means the default rather than never.
+        $this->assertSame(129600, $this->expirationFor(''));
+        $this->assertSame(60, $this->expirationFor('60'));
+        $this->assertNull($this->expirationFor('0'));
+    }
+
     public function test_register_creates_user_and_returns_201_with_token(): void
     {
         $response = $this->postJson('/api/register', [

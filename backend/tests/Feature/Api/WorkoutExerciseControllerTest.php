@@ -55,6 +55,19 @@ class WorkoutExerciseControllerTest extends TestCase
             ->assertJsonCount(0, 'data.sets');
     }
 
+    public function test_store_rejects_notes_over_5000_characters(): void
+    {
+        $user = User::factory()->create();
+        $workout = Workout::factory()->for($user)->inProgress()->create();
+
+        Sanctum::actingAs($user);
+
+        $this->postJson("/api/workouts/{$workout->id}/exercises", [
+            'exercise_id' => Exercise::factory()->create()->id,
+            'notes' => str_repeat('a', 5001),
+        ])->assertUnprocessable()->assertJsonValidationErrors('notes');
+    }
+
     public function test_store_forbids_another_users_workout_with_403(): void
     {
         $workout = Workout::factory()->for(User::factory())->inProgress()->create();

@@ -69,7 +69,7 @@ export default function ExercisesScreen() {
           />
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-          <Chip label="Mine" selected={customOnly} onPress={() => setCustomOnly((v) => !v)} />
+          <Chip label="Custom" selected={customOnly} onPress={() => setCustomOnly((v) => !v)} />
           <Chip label="All muscles" selected={muscleGroupId === undefined} onPress={() => setMuscleGroupId(undefined)} />
           {(muscleGroups.data?.data ?? []).map((mg) => (
             <Chip

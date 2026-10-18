@@ -247,7 +247,7 @@ class WorkoutControllerTest extends TestCase
             ->assertJsonPath('data.total_sets', 2);
     }
 
-    public function test_show_includes_each_exercises_muscle_group_and_equipment(): void
+    public function test_show_and_complete_include_each_exercises_muscle_group_and_equipment(): void
     {
         $user = User::factory()->create();
         $workout = Workout::factory()->for($user)->inProgress()->create();
@@ -256,10 +256,12 @@ class WorkoutControllerTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $this->getJson("/api/workouts/{$workout->id}")
-            ->assertOk()
-            ->assertJsonPath('data.exercises.0.exercise.muscle_group.name', $exercise->muscleGroup->name)
-            ->assertJsonPath('data.exercises.0.exercise.equipment.name', $exercise->equipment->name);
+        // The app replaces the screen's workout with the complete() response, so it must match show().
+        foreach ([$this->getJson("/api/workouts/{$workout->id}"), $this->postJson("/api/workouts/{$workout->id}/complete")] as $response) {
+            $response->assertOk()
+                ->assertJsonPath('data.exercises.0.exercise.muscle_group.name', $exercise->muscleGroup->name)
+                ->assertJsonPath('data.exercises.0.exercise.equipment.name', $exercise->equipment->name);
+        }
     }
 
     public function test_show_forbids_another_users_workout_with_403(): void
@@ -521,5 +523,90 @@ class WorkoutControllerTest extends TestCase
 
         $this->putJson("/api/workouts/{$workout->id}", ['completed_at' => now()->addMinute()->toIso8601String()])
             ->assertOk();
+    }
+
+    public function test_show_includes_last_finished_sessions_ticked_sets_for_each_exercise(): void
+    {
+        $user = User::factory()->create();
+        $exercise = Exercise::factory()->create(['user_id' => null]);
+
+        $older = Workout::factory()->for($user)->create(['started_at' => now()->subDays(7), 'completed_at' => now()->subDays(7)]);
+        ExerciseSet::factory()->for(WorkoutExercise::factory()->for($older)->create(['exercise_id' => $exercise->id]))
+            ->create(['set_number' => 1, 'weight_kg' => 50, 'reps' => 10]);
+
+        $last = Workout::factory()->for($user)->create(['started_at' => now()->subDays(2), 'completed_at' => now()->subDays(2)]);
+        $lastExercise = WorkoutExercise::factory()->for($last)->create(['exercise_id' => $exercise->id]);
+        ExerciseSet::factory()->for($lastExercise)->create(['set_number' => 2, 'weight_kg' => 65, 'reps' => 6]);
+        ExerciseSet::factory()->for($lastExercise)->create(['set_number' => 1, 'weight_kg' => 60, 'reps' => 8]);
+        ExerciseSet::factory()->for($lastExercise)->incomplete()->create(['set_number' => 3, 'weight_kg' => 70]);
+
+        // Another user's newer session and today's unfinished one don't count.
+        $theirs = Workout::factory()->for(User::factory())->create(['started_at' => now()->subDay(), 'completed_at' => now()->subDay()]);
+        ExerciseSet::factory()->for(WorkoutExercise::factory()->for($theirs)->create(['exercise_id' => $exercise->id]))->create();
+
+        $today = Workout::factory()->for($user)->inProgress()->create();
+        WorkoutExercise::factory()->for($today)->create(['exercise_id' => $exercise->id]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson("/api/workouts/{$today->id}")
+            ->assertOk()
+            ->assertJsonCount(2, 'data.exercises.0.previous_sets')
+            ->assertJsonPath('data.exercises.0.previous_sets.0.weight_kg', 60)
+            ->assertJsonPath('data.exercises.0.previous_sets.0.reps', 8)
+            ->assertJsonPath('data.exercises.0.previous_sets.1.weight_kg', 65);
+
+        // Adding it mid-session brings last time's sets too.
+        $this->postJson("/api/workouts/{$today->id}/exercises", ['exercise_id' => $exercise->id])
+            ->assertCreated()
+            ->assertJsonCount(2, 'data.previous_sets');
+
+        // The first time an exercise is done there is nothing to show.
+        $this->getJson("/api/workouts/{$older->id}")
+            ->assertOk()
+            ->assertJsonCount(0, 'data.exercises.0.previous_sets');
+    }
+
+    public function test_previous_sets_come_from_the_first_block_when_last_session_had_the_exercise_twice(): void
+    {
+        $user = User::factory()->create();
+        $exercise = Exercise::factory()->create(['user_id' => null]);
+        $last = Workout::factory()->for($user)->create(['started_at' => now()->subDay(), 'completed_at' => now()->subDay()]);
+
+        // The back-off block is saved first, so row order alone would pick it.
+        ExerciseSet::factory()->for(WorkoutExercise::factory()->for($last)->create(['exercise_id' => $exercise->id, 'order' => 1]))
+            ->create(['set_number' => 1, 'weight_kg' => 60]);
+        ExerciseSet::factory()->for(WorkoutExercise::factory()->for($last)->create(['exercise_id' => $exercise->id, 'order' => 0]))
+            ->create(['set_number' => 1, 'weight_kg' => 100]);
+
+        $today = Workout::factory()->for($user)->inProgress()->create();
+        WorkoutExercise::factory()->for($today)->create(['exercise_id' => $exercise->id]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson("/api/workouts/{$today->id}")
+            ->assertOk()
+            ->assertJsonPath('data.exercises.0.previous_sets.0.weight_kg', 100);
+    }
+
+    public function test_only_one_workout_can_be_in_progress_at_a_time(): void
+    {
+        $user = User::factory()->create();
+        $active = Workout::factory()->for($user)->inProgress()->create(['name' => 'Leg Day']);
+        $finished = Workout::factory()->for($user)->create();
+        $template = WorkoutTemplate::factory()->for($user)->create();
+
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/workouts', ['name' => 'Another'])
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'Finish or delete “Leg Day” before starting another workout.');
+        $this->postJson("/api/workout-templates/{$template->id}/start")->assertStatus(409);
+        $this->putJson("/api/workouts/{$finished->id}", ['completed_at' => null])->assertStatus(409);
+        $this->assertSame(1, $user->workouts()->whereNull('completed_at')->count());
+
+        // Finishing (or deleting) it frees the slot.
+        $this->postJson("/api/workouts/{$active->id}/complete")->assertOk();
+        $this->postJson('/api/workouts', ['name' => 'Another'])->assertCreated();
     }
 }

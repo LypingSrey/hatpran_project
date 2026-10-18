@@ -48,7 +48,13 @@ npx expo lint      # lint
   - `workout/`, `template/`, `exercise/`: detail and create screens. `workout/edit/` edits a finished workout.
   - `profile/edit`: profile picture, name, email and password.
   - `record/manual`: add, edit or delete a record entered by hand.
+  - `records/[group]`: one muscle group's exercises that have records; each opens the exercise screen.
 - `src/lib/`: the API client (`api.ts`), session handling (`auth.tsx`; the token lives in SecureStore, or
-  localStorage on the web), types, formatting, dialogs and the profile picture picker.
-- `src/components/`: shared UI (`ui.tsx`), the set-logging row, the exercise picker, and the workout, record,
-  avatar and date components.
+  localStorage on the web), types, formatting, dialogs, record grouping (`recordGroups.ts`) and the profile
+  picture picker.
+- `src/components/`: shared UI (`ui.tsx`), the set-logging row, the exercise picker with its category chips, the
+  rest timer, the in-app confirm dialog used on the web, muscle icons, and the workout, record, avatar and date
+  components.
+
+Opening any screen by URL, or reloading on the web, puts the tabs underneath it so it keeps a back button
+(`unstable_settings` in `src/app/_layout.tsx`).
