@@ -205,6 +205,18 @@ class ManualRecordControllerTest extends TestCase
         ])->assertUnprocessable()->assertJsonValidationErrors(['achieved_at']);
     }
 
+    public function test_store_allows_a_phone_clock_a_little_ahead(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->postJson('/api/manual-records', [
+            'exercise_id' => $this->bench()->id,
+            'record_type' => 'max_weight',
+            'value' => 100,
+            'achieved_at' => now()->addMinute()->toIso8601String(),
+        ])->assertCreated();
+    }
+
     public function test_store_rejects_fractional_reps_with_422(): void
     {
         Sanctum::actingAs(User::factory()->create());

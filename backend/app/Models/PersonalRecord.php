@@ -54,13 +54,16 @@ class PersonalRecord extends Model
 
     /**
      * The value a set scores for the given record type.
+     *
+     * Volume is rounded to the 2 decimals personal_records.value stores; unrounded, 20.1 kg × 3 comes out
+     * as 60.300000000000004 and would beat the saved 60.30 every time the same set is repeated.
      */
     public static function valueFromSet(string $recordType, ExerciseSet $set): float
     {
         return (float) match ($recordType) {
             'max_weight' => $set->weight_kg,
             'max_reps' => $set->reps,
-            'max_volume' => $set->volume,
+            'max_volume' => round($set->volume, 2),
             'max_duration' => $set->duration_seconds,
             'max_distance' => $set->distance_meters,
             default => 0,

@@ -54,9 +54,11 @@ class ManualRecordController extends Controller
                     ->where('user_id', $user->id)
                     ->where('exercise_id', $request->integer('exercise_id')),
             ],
-            'achieved_at' => 'required|date|before_or_equal:now',
+            // A few minutes' slack covers a phone clock that runs slightly fast, as for workout times.
+            'achieved_at' => 'required|date|before_or_equal:+5 minutes',
         ], [
             'record_type.unique' => 'You already entered this record for this exercise. Edit it instead.',
+            'achieved_at.before_or_equal' => "The date can't be in the future.",
         ]);
 
         $exercise = Exercise::findOrFail($validated['exercise_id']);
@@ -97,7 +99,9 @@ class ManualRecordController extends Controller
 
         $validated = $request->validate([
             'value' => ['sometimes', ...$this->valueRules($manualRecord->record_type)],
-            'achieved_at' => 'sometimes|required|date|before_or_equal:now',
+            'achieved_at' => 'sometimes|required|date|before_or_equal:+5 minutes',
+        ], [
+            'achieved_at.before_or_equal' => "The date can't be in the future.",
         ]);
 
         DB::transaction(function () use ($manualRecord, $validated) {
