@@ -1,9 +1,15 @@
 # HatPran
 
-[![CI](https://github.com/LypingSrey/hatpran/actions/workflows/ci.yml/badge.svg)](https://github.com/LypingSrey/hatpran/actions/workflows/ci.yml)
+[![CI](https://github.com/LypingSrey/hatpran_project/actions/workflows/ci.yml/badge.svg)](https://github.com/LypingSrey/hatpran_project/actions/workflows/ci.yml)
 
 A workout tracker for iPhone, Android and the web. Log your sets as you train, save routines as templates, and let
 HatPran keep your personal records up to date automatically.
+
+## Screenshots
+
+| Log a workout | Pick exercises | Finish and see your records | Your history |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/screenshots/workout-log.png" width="200" alt="A push day in progress: elapsed time, volume, sets done and the ticked bench press sets"> | <img src="docs/screenshots/exercise-picker.png" width="200" alt="The exercise picker grouped by category, with two chest exercises selected"> | <img src="docs/screenshots/workout-complete.png" width="200" alt="The workout complete screen with totals and two new bench press records"> | <img src="docs/screenshots/history.png" width="200" alt="The Workouts tab listing past push and leg days with duration, volume and sets"> |
 
 ## Features
 
