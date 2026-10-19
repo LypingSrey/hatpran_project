@@ -279,6 +279,26 @@ class PersonalRecordDetectionTest extends TestCase
         $this->assertSame([], $this->recordValues($user, $bench));
     }
 
+    public function test_repeating_a_fractional_weight_set_is_not_a_new_volume_record(): void
+    {
+        $user = User::factory()->create();
+        $bench = Exercise::factory()->create(['name' => 'Bench Press', 'exercise_type' => 'weight_reps']);
+        $first = $this->workoutWithSets($user, $bench, [['weight_kg' => 20.1, 'reps' => 3]], completed: true);
+        $first->recordPersonalRecords();
+        $workout = $this->workoutWithSets($user, $bench, [['weight_kg' => 20.1, 'reps' => 3]]);
+
+        Sanctum::actingAs($user);
+
+        $this->postJson("/api/workouts/{$workout->id}/complete")
+            ->assertOk()
+            ->assertJsonCount(0, 'personal_records');
+
+        $this->assertDatabaseHas('personal_records', [
+            'record_type' => 'max_volume',
+            'exercise_set_id' => $first->workoutExercises->first()->sets->first()->id,
+        ]);
+    }
+
     public function test_editing_a_set_in_an_unfinished_workout_does_not_touch_records(): void
     {
         $user = User::factory()->create();
