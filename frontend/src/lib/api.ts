@@ -16,6 +16,7 @@ import type {
   User,
   UserStats,
   Workout,
+  WorkoutDay,
   WorkoutExercise,
   WorkoutTemplate,
 } from './types';
@@ -168,8 +169,25 @@ export const api = {
   deleteExercise: (id: number) => request<void>('DELETE', `/exercises/${id}`),
   exerciseRecords: (id: number) => request<Data<PersonalRecord[]>>('GET', `/exercises/${id}/personal-records`),
 
-  workouts: (params: { completed?: boolean; in_progress?: boolean; page?: number; per_page?: number } = {}) =>
-    request<Paginated<Workout>>('GET', '/workouts' + query(params)),
+  workouts: (
+    params: {
+      completed?: boolean;
+      in_progress?: boolean;
+      /** ISO start-time window: started at or after `from`, before `to`. */
+      from?: string;
+      to?: string;
+      page?: number;
+      per_page?: number;
+    } = {},
+  ) => request<Paginated<Workout>>('GET', '/workouts' + query(params)),
+  /** Every finished workout started in [from, to), across all pages, e.g. one month for the calendar. */
+  workoutsBetween: (from: Date, to: Date) =>
+    fetchAllPages((page) =>
+      api.workouts({ completed: true, from: from.toISOString(), to: to.toISOString(), per_page: 100, page }),
+    ),
+  /** Start times of finished workouts in [from, to), up to a year, for the calendar's year view. */
+  workoutDays: (from: Date, to: Date) =>
+    request<Data<WorkoutDay[]>>('GET', '/workouts/days' + query({ from: from.toISOString(), to: to.toISOString() })),
   workout: (id: number) => request<Data<Workout>>('GET', `/workouts/${id}`),
   createWorkout: (body: {
     name: string;

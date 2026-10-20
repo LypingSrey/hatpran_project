@@ -9,6 +9,7 @@ use App\Models\ExerciseSet;
 use App\Models\PersonalRecord;
 use App\Models\Workout;
 use App\Models\WorkoutTemplate;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
@@ -22,16 +23,66 @@ class WorkoutController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
+        $window = $this->startWindow($request, required: false);
+
         $workouts = $request->user()
             ->workouts()
             ->with(['workoutExercises.exercise', 'workoutExercises.sets', 'template'])
             ->when($request->boolean('completed'), fn ($q) => $q->whereNotNull('completed_at'))
             ->when($request->boolean('in_progress'), fn ($q) => $q->whereNull('completed_at'))
+            ->when($window['from'], fn ($q, $from) => $q->where('started_at', '>=', $from))
+            ->when($window['to'], fn ($q, $to) => $q->where('started_at', '<', $to))
             ->latest('started_at')
             ->latest('id')
             ->paginate($this->perPage($request, 20));
 
         return WorkoutResource::collection($workouts);
+    }
+
+    /**
+     * Just the id and start time of each finished workout in a window of up to a year: enough for the
+     * training calendar's year view to mark trained days without loading every exercise and set.
+     */
+    public function days(Request $request): JsonResponse
+    {
+        $window = $this->startWindow($request, required: true);
+
+        if ($window['from']->diffInDays($window['to']) > 367) {
+            throw ValidationException::withMessages(['to' => 'The window can be at most a year long.']);
+        }
+
+        $workouts = $request->user()
+            ->workouts()
+            ->whereNotNull('completed_at')
+            ->where('started_at', '>=', $window['from'])
+            ->where('started_at', '<', $window['to'])
+            ->orderBy('started_at')
+            ->orderBy('id')
+            ->get(['id', 'started_at']);
+
+        return response()->json([
+            'data' => $workouts->map(fn (Workout $w) => ['id' => $w->id, 'started_at' => $w->started_at]),
+        ]);
+    }
+
+    /**
+     * A start-time window, e.g. one month for the training calendar. The app sends its own local bounds,
+     * so day boundaries follow the phone's time zone rather than the server's.
+     *
+     * @return array{from: ?Carbon, to: ?Carbon}
+     */
+    private function startWindow(Request $request, bool $required): array
+    {
+        $presence = $required ? 'required' : 'nullable';
+        $validated = $request->validate([
+            'from' => "{$presence}|date",
+            'to' => "{$presence}|date|after:from",
+        ]);
+
+        return [
+            'from' => isset($validated['from']) ? Carbon::parse($validated['from']) : null,
+            'to' => isset($validated['to']) ? Carbon::parse($validated['to']) : null,
+        ];
     }
 
     public function store(Request $request): WorkoutResource

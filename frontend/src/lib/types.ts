@@ -109,6 +109,12 @@ export interface Workout {
   created_at: string;
 }
 
+/** A finished workout reduced to when it started, for the calendar's year view. */
+export interface WorkoutDay {
+  id: number;
+  started_at: string;
+}
+
 export interface PersonalRecord {
   id: number;
   record_type: RecordType;

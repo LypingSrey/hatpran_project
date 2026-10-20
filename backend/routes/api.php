@@ -42,6 +42,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('exercises', ExerciseController::class);
 
     // Workouts
+    // Before the resource routes, so "days" isn't read as a workout id
+    Route::get('workouts/days', [WorkoutController::class, 'days']);
     Route::post('workouts/{workout}/complete', [WorkoutController::class, 'complete']);
     Route::apiResource('workouts', WorkoutController::class);
 
