@@ -6,10 +6,12 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native'
 import { AppearanceMenu } from '@/components/AppearanceMenu';
 import { Avatar } from '@/components/Avatar';
 import { ExerciseRecordsRow } from '@/components/ExerciseRecordsRow';
-import { Button, Card, ErrorBanner, Rule, ScreenTitle, Section, useText } from '@/components/ui';
+import { MonthCalendar, YearCalendar } from '@/components/TrainingCalendar';
+import { Button, Card, Chip, ErrorBanner, Rule, ScreenTitle, Section, useText } from '@/components/ui';
 import { WorkoutRow } from '@/components/WorkoutRow';
 import { API_URL, api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { monthBounds, monthOf, sameMonth, yearBounds, type Month } from '@/lib/calendar';
 import { formatDuration, formatNumber } from '@/lib/format';
 import { groupByExercise } from '@/lib/recordGroups';
 import { makeStyles, spacing, type, useColors } from '@/lib/theme';
@@ -24,11 +26,28 @@ export default function ProfileScreen() {
   const recent = useApi(() => api.workouts({ completed: true, per_page: RECENT_COUNT }));
   // Every record, so each exercise's count is complete; the card shows the most recently improved few.
   const records = useApi(() => api.allPersonalRecords());
+  const [month, setMonth] = useState<Month>(() => monthOf(new Date()));
+  // Tagged with its month: while the next month loads, the previous result is still the hook's data.
+  const calendar = useApi(async () => {
+    const { from, to } = monthBounds(month);
+    return { month, workouts: await api.workoutsBetween(from, to) };
+  }, [month.year, month.month]);
+  const calendarWorkouts = calendar.data && sameMonth(calendar.data.month, month) ? calendar.data.workouts : undefined;
+  const [calendarView, setCalendarView] = useState<'month' | 'year'>('month');
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  // Only loaded while the year view is showing; tagged with its year for the same reason as the month.
+  const yearDays = useApi(async () => {
+    if (calendarView !== 'year') return null;
+    const { from, to } = yearBounds(year);
+    return { year, days: (await api.workoutDays(from, to)).data };
+  }, [calendarView, year]);
+  const yearWorkouts = yearDays.data?.year === year ? yearDays.data.days : undefined;
   const styles = useStyles();
   const t = useText();
   const c = useColors();
 
-  const refresh = () => Promise.all([stats.refresh(), recent.refresh(), records.refresh()]);
+  const refresh = () =>
+    Promise.all([stats.refresh(), recent.refresh(), records.refresh(), calendar.refresh(), yearDays.refresh()]);
   const error = stats.error ?? recent.error ?? records.error;
   const totals = stats.data?.data;
   const workouts = recent.data?.data ?? [];
@@ -49,7 +68,9 @@ export default function ProfileScreen() {
       contentContainerStyle={styles.page}
       refreshControl={
         <RefreshControl
-          refreshing={stats.isRefreshing || recent.isRefreshing || records.isRefreshing}
+          refreshing={
+            stats.isRefreshing || recent.isRefreshing || records.isRefreshing || calendar.isRefreshing || yearDays.isRefreshing
+          }
           onRefresh={refresh}
           tintColor={c.textMuted}
         />
@@ -80,6 +101,46 @@ export default function ProfileScreen() {
       </Card>
 
       {error ? <ErrorBanner message={error} onRetry={refresh} /> : null}
+
+      <Section
+        title="Calendar"
+        action={
+          <View style={styles.calendarViews}>
+            <Chip label="Month" selected={calendarView === 'month'} onPress={() => setCalendarView('month')} />
+            <Chip
+              label="Year"
+              selected={calendarView === 'year'}
+              onPress={() => {
+                setYear(month.year);
+                setCalendarView('year');
+              }}
+            />
+          </View>
+        }
+        style={styles.section}
+      >
+        {calendarView === 'month' ? (
+          <MonthCalendar
+            month={month}
+            onMonthChange={setMonth}
+            workouts={calendarWorkouts}
+            error={calendar.error}
+            onRetry={calendar.refresh}
+          />
+        ) : (
+          <YearCalendar
+            year={year}
+            onYearChange={setYear}
+            onPickMonth={(picked) => {
+              setMonth(picked);
+              setCalendarView('month');
+            }}
+            workouts={yearWorkouts}
+            error={yearDays.error}
+            onRetry={yearDays.refresh}
+          />
+        )}
+      </Section>
 
       <Section title="Lifetime totals" style={styles.section}>
         <Card flush>
@@ -184,6 +245,7 @@ const useStyles = makeStyles((c) => ({
   identity: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
   identityText: { flex: 1, gap: 2 },
   section: { marginTop: spacing.lg },
+  calendarViews: { flexDirection: 'row', gap: spacing.sm },
   totalRow: {
     flexDirection: 'row',
     alignItems: 'center',

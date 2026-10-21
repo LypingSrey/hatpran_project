@@ -53,6 +53,72 @@ class WorkoutControllerTest extends TestCase
         $this->getJson('/api/workouts?completed=false')->assertJsonCount(2, 'data');
     }
 
+    public function test_index_filters_by_start_time_window(): void
+    {
+        $user = User::factory()->create();
+        Workout::factory()->for($user)->create(['started_at' => '2026-09-30 23:59:59']);
+        $first = Workout::factory()->for($user)->create(['started_at' => '2026-10-01 00:00:00']);
+        $last = Workout::factory()->for($user)->create(['started_at' => '2026-10-31 23:59:59']);
+        Workout::factory()->for($user)->create(['started_at' => '2026-11-01 00:00:00']);
+        Workout::factory()->create(['started_at' => '2026-10-15 12:00:00']);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/workouts?from=2026-10-01T00:00:00Z&to=2026-11-01T00:00:00Z')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.id', $last->id)
+            ->assertJsonPath('data.1.id', $first->id);
+    }
+
+    public function test_days_returns_401_without_token(): void
+    {
+        $this->getJson('/api/workouts/days?from=2026-01-01T00:00:00Z&to=2027-01-01T00:00:00Z')->assertUnauthorized();
+    }
+
+    public function test_days_lists_only_own_finished_workouts_in_the_window_oldest_first(): void
+    {
+        $user = User::factory()->create();
+        Workout::factory()->for($user)->create(['started_at' => '2025-12-31 23:59:59']);
+        $later = Workout::factory()->for($user)->create(['started_at' => '2026-10-06 18:00:00']);
+        $earlier = Workout::factory()->for($user)->create(['started_at' => '2026-01-01 00:00:00']);
+        Workout::factory()->for($user)->inProgress()->create();
+        Workout::factory()->for($user)->create(['started_at' => '2027-01-01 00:00:00']);
+        Workout::factory()->create(['started_at' => '2026-05-05 12:00:00']);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/workouts/days?from=2026-01-01T00:00:00Z&to=2027-01-01T00:00:00Z')
+            ->assertOk()
+            ->assertExactJson([
+                'data' => [
+                    ['id' => $earlier->id, 'started_at' => $earlier->started_at->toJSON()],
+                    ['id' => $later->id, 'started_at' => $later->started_at->toJSON()],
+                ],
+            ]);
+    }
+
+    public function test_days_requires_a_window_of_at_most_a_year_with_422(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->getJson('/api/workouts/days')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['from', 'to']);
+        $this->getJson('/api/workouts/days?from=2025-01-01T00:00:00Z&to=2027-01-01T00:00:00Z')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('to');
+    }
+
+    public function test_index_rejects_a_window_that_ends_before_it_starts_with_422(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->getJson('/api/workouts?from=2026-11-01T00:00:00Z&to=2026-10-01T00:00:00Z')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('to');
+    }
+
     public function test_store_creates_workout_with_exercises_and_sets_and_returns_201(): void
     {
         $this->freezeSecond();
