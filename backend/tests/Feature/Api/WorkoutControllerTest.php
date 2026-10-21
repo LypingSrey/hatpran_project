@@ -53,6 +53,29 @@ class WorkoutControllerTest extends TestCase
         $this->getJson('/api/workouts?completed=false')->assertJsonCount(2, 'data');
     }
 
+    public function test_index_filters_by_start_time_range_including_from_and_excluding_to(): void
+    {
+        $user = User::factory()->create();
+        Workout::factory()->for($user)->create(['started_at' => '2026-09-30 23:59:59']);
+        $first = Workout::factory()->for($user)->create(['started_at' => '2026-10-01 00:00:00']);
+        $last = Workout::factory()->for($user)->create(['started_at' => '2026-10-31 23:59:59']);
+        Workout::factory()->for($user)->create(['started_at' => '2026-11-01 00:00:00']);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/workouts?from=2026-10-01T00:00:00Z&to=2026-11-01T00:00:00Z')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.id', $last->id)
+            ->assertJsonPath('data.1.id', $first->id);
+        $this->getJson('/api/workouts?from=2026-10-31T00:00:00Z')->assertJsonCount(2, 'data');
+        // Midnight on 1 November at +07:00 is 17:00 UTC on 31 October, so the 23:59:59 UTC workout falls after it.
+        $this->getJson('/api/workouts?from=2026-10-01T00:00:00Z&to='.urlencode('2026-11-01T00:00:00+07:00'))
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $first->id);
+        $this->getJson('/api/workouts?from=not-a-date')->assertJsonValidationErrors('from');
+    }
+
     public function test_store_creates_workout_with_exercises_and_sets_and_returns_201(): void
     {
         $this->freezeSecond();

@@ -22,11 +22,18 @@ class WorkoutController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
+        $request->validate(['from' => 'nullable|date', 'to' => 'nullable|date']);
+        // Converted to UTC, because started_at is stored in UTC and the query compares the bare date and time.
+        $from = $request->date('from')?->utc();
+        $to = $request->date('to')?->utc();
+
         $workouts = $request->user()
             ->workouts()
             ->with(['workoutExercises.exercise', 'workoutExercises.sets', 'template'])
             ->when($request->boolean('completed'), fn ($q) => $q->whereNotNull('completed_at'))
             ->when($request->boolean('in_progress'), fn ($q) => $q->whereNull('completed_at'))
+            ->when($from, fn ($q) => $q->where('started_at', '>=', $from))
+            ->when($to, fn ($q) => $q->where('started_at', '<', $to))
             ->latest('started_at')
             ->latest('id')
             ->paginate($this->perPage($request, 20));

@@ -168,7 +168,17 @@ export const api = {
   deleteExercise: (id: number) => request<void>('DELETE', `/exercises/${id}`),
   exerciseRecords: (id: number) => request<Data<PersonalRecord[]>>('GET', `/exercises/${id}/personal-records`),
 
-  workouts: (params: { completed?: boolean; in_progress?: boolean; page?: number; per_page?: number } = {}) =>
+  /** `from` (inclusive) and `to` (exclusive) are ISO timestamps that bound `started_at`. */
+  workouts: (
+    params: {
+      completed?: boolean;
+      in_progress?: boolean;
+      from?: string;
+      to?: string;
+      page?: number;
+      per_page?: number;
+    } = {},
+  ) =>
     request<Paginated<Workout>>('GET', '/workouts' + query(params)),
   workout: (id: number) => request<Data<Workout>>('GET', `/workouts/${id}`),
   createWorkout: (body: {
