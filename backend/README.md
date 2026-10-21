@@ -100,8 +100,8 @@ The logic is in `App\Models\PersonalRecord::recalculate()` and `App\Models\Worko
 ## Database
 
 - **Development:** PostgreSQL 17 in Docker (`../database/compose.yaml`) on `127.0.0.1:54320`. Data persists in
-  `database/data/`, and only deleting that folder deletes it. Start it with `docker compose up -d --wait` from
-  `database/`, which reads its credentials from this folder's `.env`.
+  `../database/data/`, and only deleting that folder deletes it. Start it with `docker compose up -d --wait` from
+  `../database/`, which reads its credentials from this folder's `.env`.
 - **Tests:** a separate container (`compose.testing.yaml`) on port 54329 that is wiped on every run.
   `phpunit.xml` points tests there, so they never touch development data.
 - **Profile pictures:** stored on the `public` disk under `storage/app/public/avatars`. Run

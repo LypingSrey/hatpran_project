@@ -64,6 +64,18 @@ Seeding loads the exercise library and a local test account, `test@example.com` 
 The development database is PostgreSQL 17 on `127.0.0.1:54320` (database and user `hatpran`, password from
 `.env`), so any SQL client can connect with `postgresql://hatpran:<DB_PASSWORD>@127.0.0.1:54320/hatpran`.
 
+**Upgrading from `backend/compose.yaml`?** The database used to live in a Docker volume started from `backend/`.
+That old container keeps port 54320, so move your data across and remove it before starting the new one:
+
+```bash
+docker exec hatpran-pgsql pg_dump -U hatpran hatpran > hatpran.sql   # back up your data
+docker rm -f hatpran-pgsql                                           # frees port 54320
+cd database && docker compose up -d --wait
+docker compose exec -T pgsql psql -q -U hatpran -d hatpran < ../hatpran.sql   # restore instead of migrate --seed
+```
+
+The old `backend_hatpran-pgsql` volume stays until you run `docker volume rm backend_hatpran-pgsql`.
+
 **2. Start the app**
 
 ```bash
