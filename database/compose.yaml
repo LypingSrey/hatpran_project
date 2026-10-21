@@ -1,0 +1,35 @@
+# Local development database (PostgreSQL 17).
+#
+# - Credentials come from backend/.env (DB_DATABASE, DB_USERNAME, DB_PASSWORD, DB_PORT); this folder's .env is a
+#   symlink to it, so the API and the database always agree.
+# - Data lives in database/data/ (gitignored), so it survives restarts and `docker compose down`.
+#   Deleting that folder (with the container stopped) deletes the database.
+# - `restart: unless-stopped` makes Docker start the database automatically whenever Docker starts,
+#   unless you stopped it yourself with `docker compose stop`.
+#
+# First start (from this folder):   docker compose up -d --wait
+# Connect with:  postgresql://<DB_USERNAME>:<DB_PASSWORD>@127.0.0.1:<DB_PORT>/<DB_DATABASE>
+#
+# Tests use a separate throwaway database (backend/compose.testing.yaml, port 54329) and never touch this one.
+
+# Fixed project name, so a checkout whose folder happens to share this folder's name can't reuse this database.
+name: hatpran-database
+
+services:
+  pgsql:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-hatpran}
+      POSTGRES_USER: ${DB_USERNAME:-hatpran}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in backend/.env}
+    ports:
+      - "${DB_PORT:-54320}:5432"
+    volumes:
+      - ./data:/var/lib/postgresql/data
+    # Come back up automatically after a reboot / Docker restart.
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 20

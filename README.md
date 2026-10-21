@@ -39,6 +39,7 @@ HatPran keep your personal records up to date automatically.
 | Folder | What | Stack |
 | --- | --- | --- |
 | [`backend/`](backend) | REST API | PHP 8.3+, Laravel 13, Sanctum token auth, PostgreSQL 17 |
+| [`database/`](database) | Local PostgreSQL | Docker Compose, PostgreSQL 17 |
 | [`frontend/`](frontend) | Mobile + web app | React Native 0.86, Expo SDK 57, Expo Router, TypeScript |
 
 ## Getting started
@@ -51,8 +52,8 @@ You need PHP 8.3+, Composer, Docker (for PostgreSQL) and Node.js.
 cd backend
 composer install
 cp .env.example .env && php artisan key:generate
-# set DB_PASSWORD in .env to any value, then start PostgreSQL (data persists in a Docker volume):
-docker compose up -d --wait
+# set DB_PASSWORD in .env to any value, then start PostgreSQL (data persists in database/data/):
+(cd ../database && docker compose up -d --wait)
 php artisan migrate --seed    # on an existing database: php artisan migrate && php artisan db:seed --class=ExerciseSeeder
 php artisan storage:link      # serves uploaded profile pictures
 php artisan serve --host=0.0.0.0 --port=8000
